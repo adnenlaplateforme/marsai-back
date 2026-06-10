@@ -15,7 +15,7 @@ export const setTokensInCookies = (
   });
 };
 
-export const unsetTokensInCookies = (res: Response): void =>{
+export const unsetTokensInCookies = (res: Response): void => {
   res.clearCookie('accessToken');
   res.clearCookie('refreshToken');
 };

@@ -35,7 +35,7 @@ const getAll = async (
                     WHERE is_director = true \
                     AND m.english_title LIKE ? \
                     AND( m.is_hybrid = ? OR m.is_hybrid = ? )';
-                    // WHERE c.contribution = "Director"\
+  // WHERE c.contribution = "Director"\
   const sqlData =
     'SELECT m.*, \
                     JSON_OBJECT( \
@@ -198,13 +198,12 @@ const getAllSorted = async (
   return { total: resCount, data } as MovieFindAllResponse;
 };
 
-
 // SELECT column FROM table
 // ORDER BY RAND()
 // LIMIT 1
 
 const getRandom = async (qt: number): Promise<Movie[]> => {
-    const sqlData =
+  const sqlData =
     'SELECT m.*, \
                     JSON_OBJECT( \
                         "gender", c.gender,\
@@ -229,7 +228,7 @@ const movieModel = {
   remove,
   update,
   getAllSorted,
-  getRandom
+  getRandom,
 };
 
 export default movieModel;

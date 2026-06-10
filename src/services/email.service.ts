@@ -170,7 +170,6 @@ const statusUpdatePendingMail = async (
   });
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
 };
-
 const statusUpdateMail = async (
   adminData: { adminText: string; adminStatus: string },
   movie: MovieWithDirector,
