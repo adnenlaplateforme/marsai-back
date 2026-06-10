@@ -53,12 +53,6 @@ const getById = async (id: number): Promise<Movie> => {
   return movie;
 };
 
-const getBySlug = async (slug: string): Promise<Movie> => {
-  const movie = await movieModel.getBySlug(slug);
-  if (!movie) throw new AppError(404, 'film not found');
-  return movie;
-};
-
 const remove = async (id: number): Promise<void> => {
   try {
     await db.beginTransaction();
@@ -147,19 +141,17 @@ const getRandom = async (qt: number) => {
   const movies = await movieModel.getRandom(qt);
   if (!movies) throw new AppError(404, 'film not found');
   return movies;
-
-}
+};
 
 const movieService = {
   create,
   getAll,
   getById,
-  getBySlug,
   remove,
   update,
   getAllSorted,
   adminUpdate,
-  getRandom
+  getRandom,
 };
 
 export default movieService;
