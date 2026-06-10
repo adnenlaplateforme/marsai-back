@@ -15,7 +15,11 @@ const movieRouter = express.Router();
 
 movieRouter.get('/', movieController.getAll);
 movieRouter.get('/sort', isLogged, movieController.getAllSorted);
-movieRouter.get('/random', validateParamsAndQuery(RandomMovieRequestSchema), movieController.getRandom);
+movieRouter.get(
+  '/random',
+  validateParamsAndQuery(RandomMovieRequestSchema),
+  movieController.getRandom,
+);
 movieRouter.post(
   '/',
   upload,
@@ -35,13 +39,12 @@ movieRouter.get('/:id/ratings', ratingController.getRatings);
 
 movieRouter.delete('/:id', movieController.remove);
 movieRouter.put('/:id', isLogged, isAdmin, movieController.adminUpdate);
-movieRouter.get('/:slug', movieController.getBySlug);
 movieRouter.post(
   '/edit/:id',
   upload,
   validate(MovieRequestSchema),
   movieController.update,
 );
-movieRouter.get('/id/:id', movieController.getById);
+movieRouter.get('/:id', movieController.getById);
 
 export default movieRouter;

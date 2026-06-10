@@ -25,12 +25,6 @@ const findById = async (id: number, lang?: string): Promise<Event> => {
   return event;
 };
 
-const findBySlug = async (slug: string, lang?: string): Promise<Event> => {
-  const event = await eventModel.findBySlug(slug, lang);
-  if (!event) throw new AppError(404, 'Event not found');
-  return event;
-};
-
 const getRemainingSeats = async (id: number): Promise<number> => {
   const seats = await eventModel.getRemainingSeats(id);
   if (seats === null) throw new AppError(404, 'Event not found');
@@ -59,7 +53,6 @@ const eventService = {
   update,
   remove,
   findById,
-  findBySlug,
   getRemainingSeats,
 };
 

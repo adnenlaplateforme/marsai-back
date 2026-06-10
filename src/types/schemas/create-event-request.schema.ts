@@ -6,12 +6,10 @@ export const CreateEventRequestSchema = z.object({
   description: z.string().optional().default(''),
   date: z.coerce.date(),
   publishedAt: z.coerce.date(),
-  duration: z.coerce.number().int().positive(),
+  duration: z.int().positive(),
   location: z.string().max(255),
-  isBookable: z
-    .enum(['true', 'false'])
-    .transform((v) => (v === 'true' ? true : false)),
-  capacity: z.coerce.number().int().positive(),
+  isBookable: z.boolean().default(false),
+  capacity: z.number().int().positive(),
   lang: z.enum(['FR', 'EN']).default('FR'),
 });
 

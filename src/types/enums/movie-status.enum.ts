@@ -4,5 +4,5 @@ export enum MovieStatus {
   ACCEPTED = 'accepted',
   SELECTED = 'selected',
   WINNER = 'winner',
-  REJECTED = 'rejected'
+  REJECTED = 'rejected',
 }

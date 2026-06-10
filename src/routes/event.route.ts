@@ -18,8 +18,6 @@ eventRouter.post(
 
 eventRouter.get('/', eventController.findAll);
 
-eventRouter.get('/:slug', eventController.findBySlug);
-
 eventRouter.put(
   '/:id',
   validate(UpdateEventRequestSchema),
@@ -31,5 +29,7 @@ eventRouter.put(
 eventRouter.delete('/:id', isLogged, isAdmin, eventController.remove);
 
 eventRouter.get('/:id/remaining-seats', eventController.getRemainingSeats);
+
+eventRouter.get('/:id', eventController.findById);
 
 export default eventRouter;

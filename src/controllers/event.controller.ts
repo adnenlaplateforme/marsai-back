@@ -34,17 +34,6 @@ const findById: RequestHandler = async (req, res, next) => {
   }
 };
 
-const findBySlug: RequestHandler = async (req, res, next) => {
-  try {
-    const { slug } = req.params;
-    const { lang } = req.query;
-    const event = await eventService.findBySlug(slug as string, lang as string);
-    return res.json(event);
-  } catch (err) {
-    next(err);
-  }
-};
-
 const remove: RequestHandler = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -83,7 +72,6 @@ const eventController = {
   remove,
   update,
   findById,
-  findBySlug,
   getRemainingSeats,
 };
 

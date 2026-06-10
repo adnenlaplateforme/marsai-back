@@ -89,8 +89,18 @@ Run the seed script
 ```sh
 npm run seed
 ```
+## 6. SCALEWAY Environment Variables Setup
 
-## 5. Sending Emails (Development Mode)
+Access to Scaleway PDF on google drive to fill environment variables:
+
+SCALEWAY_ACCESS_KEY=
+SCALEWAY_SECRET_KEY=
+SCALEWAY_ENDPOINT=https://s3.fr-par.scw.cloud
+SCALEWAY_BUCKET_NAME=
+SCALEWAY_REGION=
+SCALEWAY_FOLDER=
+
+## 6. Sending Emails (Development Mode)
 
 In development, emails are not sent to real inboxes. We use Ethereal Email
 to test emails.

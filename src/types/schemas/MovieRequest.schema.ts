@@ -74,8 +74,12 @@ const CollaboratorsSchema = z.object({
 
 export type Collaborator = z.infer<typeof CollaboratorsSchema>;
 
-const ImageUrlField = ImageFileSchema.transform((file) => process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key);
-const VideoUrlField = VideoFileSchema.transform((file) => process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key);
+const ImageUrlField = ImageFileSchema.transform(
+  (file) => process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key,
+);
+const VideoUrlField = VideoFileSchema.transform(
+  (file) => process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key,
+);
 
 export const MovieRequestSchema = z
   .object({
@@ -107,7 +111,7 @@ export const MovieRequestSchema = z
         data.videoPath,
         '/usr/bin/ffprobe',
       );
-
+      //const duration = 40;
       if (duration > 90) {
         ctx.addIssue({
           code: 'custom',

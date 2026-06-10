@@ -42,10 +42,13 @@ const findAll = async (lang = 'FR'): Promise<Event[]> => {
 
 const findById = async (id: number, lang = 'FR'): Promise<Event | null> => {
   const [rows] = await db.query<Event[]>(
-    `SELECT e.*, et.title, et.description, et.lang
+    `SELECT e.*, et.title, et.description, et.lang,
+      e.capacity - COALESCE(COUNT(b.id), 0) AS remaining_seats
     FROM event e
     JOIN event_translation et ON et.event_id = e.id AND et.lang = ?
-    WHERE e.id = ?`,
+    LEFT JOIN booking b ON b.event_id = e.id
+    WHERE e.id = ?
+    GROUP BY e.id, et.title, et.description, et.lang`,
     [lang, id],
   );
   return rows[0] ?? null;
