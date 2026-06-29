@@ -112,28 +112,26 @@ const adminUpdate = async (
   const { adminData, ...request } = movieRequest;
   const movie = await movieModel.getById(id);
   if (!movie) throw new AppError(404, 'film not found');
-  switch (adminData.adminStatus) {
-    case 'pending_change': {
-      const token = crypto.randomUUID() as string;
-      await emailService.statusUpdatePendingMail(adminData, movie, token);
-      await movieUpdateModel.create(movie.id!, token);
-      break;
+  if (adminData) {
+    switch (adminData.adminStatus) {
+      case 'pending_change': {
+        const token = crypto.randomUUID() as string;
+        await emailService.statusUpdatePendingMail(adminData, movie, token);
+        await movieUpdateModel.create(movie.id!, token);
+        break;
+      }
+      case 'rejected':
+      case 'accepted':
+      case 'selected':
+      case 'winner':
+        await emailService.statusUpdateMail(adminData, movie);
+        break;
+      default:
+        throw new AppError(400, `wrong movie status`);
     }
-    case 'rejected':
-    case 'accepted':
-    case 'selected':
-    case 'winner':
-      await emailService.statusUpdateMail(adminData, movie);
-      break;
-    default:
-      throw new AppError(400, `wrong movie status`);
   }
 
-  //TODO add transaction
   const affectedRows = await movieModel.update(id, request);
-  if (affectedRows === 0) {
-    throw new AppError(404, `movie not found`);
-  }
   return affectedRows;
 };
 

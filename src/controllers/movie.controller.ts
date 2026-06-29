@@ -121,11 +121,8 @@ const getAllSorted: RequestHandler = async (req, res, next) => {
 const adminUpdate: RequestHandler = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    const response = await movieService.adminUpdate(
-      parseInt(id as string),
-      req.body,
-    );
+    if (!req.body) throw new AppError(400, 'Request body is required');
+    const response = await movieService.adminUpdate(parseInt(id as string), req.body);
     return res.status(200).send(response);
   } catch (e) {
     next(e);
