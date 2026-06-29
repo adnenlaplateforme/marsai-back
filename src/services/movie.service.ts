@@ -4,6 +4,7 @@ import type {
   AdminMovieRequest,
   MovieRequest,
 } from '../types/schemas/MovieRequest.schema.js';
+import type { UpdateMovieRequest } from '../types/schemas/update-movie-request.js';
 import { generateUniqueSlug } from '../helpers/string-utils.js';
 import type Movie from '../types/interfaces/Movie.interface.js';
 import db from '../database/connection.js';
@@ -74,22 +75,24 @@ const remove = async (id: number): Promise<void> => {
 };
 const update = async (
   id: number,
-  movieRequest: MovieRequest,
+  movieRequest: UpdateMovieRequest,
   token: string,
 ): Promise<number> => {
-  if (movieRequest.originalTitle) {
+  const { stillsUrls, ...rest } = movieRequest;
+  if (rest.originalTitle) {
     const slug = await generateUniqueSlug(
-      movieRequest.originalTitle,
+      rest.originalTitle,
       async (slug) => {
         const existing = await movieModel.getBySlug(slug);
         return !!existing && existing.id !== id;
       },
     );
-    movieRequest.slug = slug;
+    rest.slug = slug;
   }
-  const affectedRows = await movieModel.update(id, movieRequest);
-  if (affectedRows === 0) {
-    throw new AppError(404, `movie not found`);
+  const affectedRows = await movieModel.update(id, rest);
+  if (stillsUrls && stillsUrls.length > 0) {
+    await imageModel.remove(id);
+    await imageModel.insertMultiple(stillsUrls, id);
   }
   await movieUpdateModel.deleteByToken(token);
   return affectedRows;

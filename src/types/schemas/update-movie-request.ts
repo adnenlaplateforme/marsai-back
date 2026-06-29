@@ -23,7 +23,10 @@ const VideoUrlOrFileField = z.union([
         return z.NEVER;
       }
     } catch {
-      ctx.addIssue({ code: 'custom', message: 'Could not verify video duration.' });
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Could not verify video duration.',
+      });
       return z.NEVER;
     }
     return url;
@@ -36,6 +39,7 @@ export const UpdateMovieRequestSchema = z.object({
   englishTitle: z.string().min(1).max(255).optional(),
   videoPath: VideoUrlOrFileField.optional(),
   coverPath: ImageUrlOrFileField.optional(),
+  stillsUrls: z.array(ImageUrlOrFileField).optional(),
   isHybrid: z
     .enum(['true', 'false'])
     .transform((v) => v === 'true')

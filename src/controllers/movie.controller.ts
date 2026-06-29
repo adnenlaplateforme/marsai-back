@@ -71,9 +71,11 @@ const update: RequestHandler = async (req, res, next) => {
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7)
       : undefined;
-    if (!token) throw new AppError(400, 'Token missing from Authorization header');
+    if (!token)
+      throw new AppError(400, 'Token missing from Authorization header');
 
-    const movieId = (await movieUpdateService.getByToken(token)).movie_id as number;
+    const movieId = (await movieUpdateService.getByToken(token))
+      .movie_id as number;
     const { id } = req.params;
     const idAsInt = parseInt(id as string);
     if (movieId !== idAsInt) throw new AppError(400, 'Invalid token');
