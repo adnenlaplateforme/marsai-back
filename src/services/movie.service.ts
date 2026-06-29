@@ -75,6 +75,7 @@ const remove = async (id: number): Promise<void> => {
 const update = async (
   id: number,
   movieRequest: MovieRequest,
+  token: string,
 ): Promise<number> => {
   if (movieRequest.originalTitle) {
     const slug = await generateUniqueSlug(
@@ -89,9 +90,8 @@ const update = async (
   const affectedRows = await movieModel.update(id, movieRequest);
   if (affectedRows === 0) {
     throw new AppError(404, `movie not found`);
-  } else {
-    await movieUpdateModel.deleteByToken(movieRequest.token as string);
   }
+  await movieUpdateModel.deleteByToken(token);
   return affectedRows;
 };
 

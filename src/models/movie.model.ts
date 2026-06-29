@@ -134,6 +134,7 @@ const update = async (id: number, movie: MovieRequest): Promise<number> => {
   const { token, stillsUrls, director, collaborators, ...movieCleaned } = movie;
   console.info(token, stillsUrls, director, collaborators);
   for (const [key, value] of Object.entries(movieCleaned)) {
+    if (value === undefined) continue;
     fields.push(`${toSnakeCase(key)} = ?`);
     values.push(value as string | number | Date | boolean);
   }

@@ -6,6 +6,7 @@ import { isAdmin } from '../middlewares/is-admin.js';
 import { isJury } from '../middlewares/is-jury.js';
 import { validate } from '../middlewares/validate.js';
 import { MovieRequestSchema } from '../types/schemas/MovieRequest.schema.js';
+import { UpdateMovieRequestSchema } from '../types/schemas/update-movie-request.js';
 import { RatingRequestSchema } from '../types/schemas/rating-request.schema.js';
 import { upload } from '../middlewares/upload.js';
 import { validateParamsAndQuery } from '../middlewares/validate-all.js';
@@ -39,10 +40,10 @@ movieRouter.get('/:id/ratings', ratingController.getRatings);
 
 movieRouter.delete('/:id', movieController.remove);
 movieRouter.put('/:id', isLogged, isAdmin, movieController.adminUpdate);
-movieRouter.post(
-  '/edit/:id',
+movieRouter.patch(
+  '/:id',
   upload,
-  validate(MovieRequestSchema),
+  validate(UpdateMovieRequestSchema),
   movieController.update,
 );
 movieRouter.get('/:id', movieController.getById);

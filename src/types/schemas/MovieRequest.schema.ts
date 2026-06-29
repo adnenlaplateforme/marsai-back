@@ -24,7 +24,7 @@ const parseJson = (value: unknown, ctx: z.RefinementCtx) => {
   return value;
 };
 
-const ImageFileSchema = z.object({
+export const ImageFileSchema = z.object({
   mimetype: z.enum(ALLOWED_IMAGE_TYPES),
   size: z.number().max(MAX_IMAGE_SIZE, {
     message: `Image size must be less than ${MAX_IMAGE_SIZE / 1048576}MB.`,
@@ -33,7 +33,7 @@ const ImageFileSchema = z.object({
   key: z.string(),
 });
 
-const VideoFileSchema = z.object({
+export const VideoFileSchema = z.object({
   mimetype: z.enum(ALLOWED_VIDEO_TYPES),
   size: z.number().max(MAX_VIDEO_SIZE, {
     message: `Video size must be less than ${MAX_VIDEO_SIZE / 1048576}MB.`,
