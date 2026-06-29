@@ -162,13 +162,14 @@ const statusUpdatePendingMail = async (
     .replace('{{MOVIE_ENGLISH_TITLE}}', movie.english_title)
     .replace('{{ADMIN_MESSAGE}}', adminData.adminText)
     .replace('{{FORM_EDIT_URL}}', `${process.env.FRONT_IP}/submit/${token}`);
-  await transporter.sendMail({
+  const result = await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: movie.director.email,
     subject: `Status update on your movie submission: ${movie.english_title}`,
     html: personalizedHtml,
   });
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
+  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 const statusUpdateMail = async (
   adminData: { adminText: string; adminStatus: string },
