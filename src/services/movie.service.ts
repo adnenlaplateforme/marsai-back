@@ -80,16 +80,13 @@ const update = async (
 ): Promise<number> => {
   const { stillsUrls, ...rest } = movieRequest;
   if (rest.originalTitle) {
-    const slug = await generateUniqueSlug(
-      rest.originalTitle,
-      async (slug) => {
-        const existing = await movieModel.getBySlug(slug);
-        return !!existing && existing.id !== id;
-      },
-    );
+    const slug = await generateUniqueSlug(rest.originalTitle, async (slug) => {
+      const existing = await movieModel.getBySlug(slug);
+      return !!existing && existing.id !== id;
+    });
     rest.slug = slug;
   }
-  const affectedRows = await movieModel.update(id, rest);
+  const affectedRows = await movieModel.update(id, rest as Partial<MovieRequest>);
   if (stillsUrls && stillsUrls.length > 0) {
     await imageModel.remove(id);
     await imageModel.insertMultiple(stillsUrls, id);
