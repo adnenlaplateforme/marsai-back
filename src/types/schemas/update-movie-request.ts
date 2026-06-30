@@ -35,6 +35,7 @@ const VideoUrlOrFileField = z.union([
 ]);
 
 export const UpdateMovieRequestSchema = z.object({
+  slug: z.string().optional(),
   originalTitle: z.string().min(1).max(255).optional(),
   englishTitle: z.string().min(1).max(255).optional(),
   videoPath: VideoUrlOrFileField.optional(),
