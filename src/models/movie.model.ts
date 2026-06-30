@@ -71,6 +71,7 @@ const getAll = async (
 const getById = async (id: number): Promise<MovieWithDirector | null> => {
   const sql =
     'SELECT m.*, \
+    (SELECT JSON_ARRAYAGG(i.path) FROM image i WHERE i.movie_id = m.id) AS stills, \
     JSON_OBJECT( \
         "gender", dir.gender,\
         "firstname", dir.firstname,\
@@ -127,13 +128,13 @@ const remove = async (id: number): Promise<number> => {
   return result.affectedRows;
 };
 
-const update = async (id: number, movie: MovieRequest): Promise<number> => {
+const update = async (id: number, movie: Partial<MovieRequest>): Promise<number> => {
   const fields: string[] = [];
   const values: (string | number | Date | boolean)[] = [];
 
-  const { token, stillsUrls, director, collaborators, ...movieCleaned } = movie;
-  console.info(token, stillsUrls, director, collaborators);
+  const { token: _token, stillsUrls: _stills, director: _dir, collaborators: _collab, ...movieCleaned } = movie;
   for (const [key, value] of Object.entries(movieCleaned)) {
+    if (value === undefined) continue;
     fields.push(`${toSnakeCase(key)} = ?`);
     values.push(value as string | number | Date | boolean);
   }

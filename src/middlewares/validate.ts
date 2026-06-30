@@ -8,14 +8,17 @@ export const validate =
     try {
       const dataToValidate: Record<string, unknown> = {
         ...(req.body as Record<string, unknown>),
-        videoPath: req.uploadedFiles?.video,
-        coverPath: req.uploadedFiles?.coverImage,
-        stillsUrls: [
-          req.uploadedFiles?.stillImageA,
-          req.uploadedFiles?.stillImageB,
-          req.uploadedFiles?.stillImageC,
-        ].filter(Boolean),
       };
+      if (req.uploadedFiles?.video)
+        dataToValidate.videoPath = req.uploadedFiles.video;
+      if (req.uploadedFiles?.coverImage)
+        dataToValidate.coverPath = req.uploadedFiles.coverImage;
+      const body = req.body as Record<string, unknown>;
+      dataToValidate.stillsUrls = [
+        req.uploadedFiles?.stillImageA ?? (body.existingStillA || undefined),
+        req.uploadedFiles?.stillImageB ?? (body.existingStillB || undefined),
+        req.uploadedFiles?.stillImageC ?? (body.existingStillC || undefined),
+      ].filter(Boolean);
       req.body = await schema.parseAsync(dataToValidate);
       next();
     } catch (error) {

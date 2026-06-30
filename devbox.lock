@@ -7,7 +7,7 @@
     },
     "nodejs@latest": {
       "last_modified": "2026-03-12T22:11:02Z",
-      "plugin_version": "0.0.2",
+      "plugin_version": "0.0.4",
       "resolved": "github:NixOS/nixpkgs/24f4544180242cd80bb2492ce6907243bc716e08#nodejs_25",
       "source": "devbox-search",
       "version": "25.8.1",
@@ -51,6 +51,54 @@
             }
           ],
           "store_path": "/nix/store/43zji4rni42y01z3y2bv3f12c16h0ba6-nodejs-25.8.1"
+        }
+      }
+    },
+    "yarn@latest": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#yarn",
+      "source": "devbox-search",
+      "version": "1.22.22",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/lqy5dclc9x809r5hd474sa8pr904205b-yarn-1.22.22",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/lqy5dclc9x809r5hd474sa8pr904205b-yarn-1.22.22"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/q12qjvf4g8zxpw2dd0pbw2cxv2bk608q-yarn-1.22.22",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/q12qjvf4g8zxpw2dd0pbw2cxv2bk608q-yarn-1.22.22"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/y972fn9z79dhgmv1zwl6zahjh2x80vl6-yarn-1.22.22",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/y972fn9z79dhgmv1zwl6zahjh2x80vl6-yarn-1.22.22"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ih3inzyxsw3ls23zs2zcrjnn1k1jvygm-yarn-1.22.22",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ih3inzyxsw3ls23zs2zcrjnn1k1jvygm-yarn-1.22.22"
         }
       }
     }

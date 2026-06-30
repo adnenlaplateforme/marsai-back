@@ -1,22 +1,59 @@
-import { Languages } from '../enums/languages.enum.js';
 import { z } from 'zod';
+import { getVideoDurationInSeconds } from 'get-video-duration';
+import { Languages } from '../enums/languages.enum.js';
+import { ImageFileSchema, VideoFileSchema } from './MovieRequest.schema.js';
 
-export const UpdateMovieRequestSchema = z
-  .object({
-    originalTitle: z.string().nonempty(),
-    englishTitle: z.string().nonempty(),
-    coverImage: z.string().nonempty(),
-    duration: z.number().int().positive(),
-    isHybrid: z.boolean(),
-    language: z.enum(Languages),
-    originalSynopsis: z.string().nonempty(),
-    englishSynopsis: z.string().nonempty(),
-    creativeProcess: z.string().nonempty(),
-    iaTools: z.string().nonempty(),
-    hasSubs: z.boolean(),
-    srt: z.string().nonempty(),
-    status: z.enum(['draft', 'published', 'archived']),
-  })
-  .partial();
+const ImageUrlOrFileField = z.union([
+  ImageFileSchema.transform(
+    (file) => process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key,
+  ),
+  z.url(),
+]);
 
-export type UpdateEventRequest = z.infer<typeof UpdateMovieRequestSchema>;
+const VideoUrlOrFileField = z.union([
+  VideoFileSchema.transform(async (file, ctx) => {
+    const url = process.env.SCALEWAY_VIRTUAL_ENDPOINT + file.key;
+    try {
+      const duration = await getVideoDurationInSeconds(url, '/usr/bin/ffprobe');
+      if (duration > 90) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Video cannot be longer than 90 seconds.',
+        });
+        return z.NEVER;
+      }
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Could not verify video duration.',
+      });
+      return z.NEVER;
+    }
+    return url;
+  }),
+  z.url(),
+]);
+
+export const UpdateMovieRequestSchema = z.object({
+  slug: z.string().optional(),
+  originalTitle: z.string().min(1).max(255).optional(),
+  englishTitle: z.string().min(1).max(255).optional(),
+  videoPath: VideoUrlOrFileField.optional(),
+  coverPath: ImageUrlOrFileField.optional(),
+  stillsUrls: z.array(ImageUrlOrFileField).optional(),
+  isHybrid: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  language: z.enum(Languages).optional(),
+  originalSynopsis: z.string().min(1).max(300).optional(),
+  englishSynopsis: z.string().min(1).max(300).optional(),
+  creativeProcess: z.string().min(1).max(500).optional(),
+  aiTools: z.string().min(1).max(500).optional(),
+  hasSubs: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+});
+
+export type UpdateMovieRequest = z.infer<typeof UpdateMovieRequestSchema>;

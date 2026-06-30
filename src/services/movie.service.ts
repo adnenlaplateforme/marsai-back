@@ -4,6 +4,7 @@ import type {
   AdminMovieRequest,
   MovieRequest,
 } from '../types/schemas/MovieRequest.schema.js';
+import type { UpdateMovieRequest } from '../types/schemas/update-movie-request.js';
 import { generateUniqueSlug } from '../helpers/string-utils.js';
 import type Movie from '../types/interfaces/Movie.interface.js';
 import db from '../database/connection.js';
@@ -74,24 +75,23 @@ const remove = async (id: number): Promise<void> => {
 };
 const update = async (
   id: number,
-  movieRequest: MovieRequest,
+  movieRequest: UpdateMovieRequest,
+  token: string,
 ): Promise<number> => {
-  if (movieRequest.originalTitle) {
-    const slug = await generateUniqueSlug(
-      movieRequest.originalTitle,
-      async (slug) => {
-        const existing = await movieModel.getBySlug(slug);
-        return !!existing && existing.id !== id;
-      },
-    );
-    movieRequest.slug = slug;
+  const { stillsUrls, ...rest } = movieRequest;
+  if (rest.originalTitle) {
+    const slug = await generateUniqueSlug(rest.originalTitle, async (slug) => {
+      const existing = await movieModel.getBySlug(slug);
+      return !!existing && existing.id !== id;
+    });
+    rest.slug = slug;
   }
-  const affectedRows = await movieModel.update(id, movieRequest);
-  if (affectedRows === 0) {
-    throw new AppError(404, `movie not found`);
-  } else {
-    await movieUpdateModel.deleteByToken(movieRequest.token as string);
+  const affectedRows = await movieModel.update(id, rest as Partial<MovieRequest>);
+  if (stillsUrls && stillsUrls.length > 0) {
+    await imageModel.remove(id);
+    await imageModel.insertMultiple(stillsUrls, id);
   }
+  await movieUpdateModel.deleteByToken(token);
   return affectedRows;
 };
 
@@ -112,28 +112,26 @@ const adminUpdate = async (
   const { adminData, ...request } = movieRequest;
   const movie = await movieModel.getById(id);
   if (!movie) throw new AppError(404, 'film not found');
-  switch (adminData.adminStatus) {
-    case 'pending_change': {
-      const token = crypto.randomUUID() as string;
-      await emailService.statusUpdatePendingMail(adminData, movie, token);
-      await movieUpdateModel.create(movie.id!, token);
-      break;
+  if (adminData) {
+    switch (adminData.adminStatus) {
+      case 'pending_change': {
+        const token = crypto.randomUUID() as string;
+        await emailService.statusUpdatePendingMail(adminData, movie, token);
+        await movieUpdateModel.create(movie.id!, token);
+        break;
+      }
+      case 'rejected':
+      case 'accepted':
+      case 'selected':
+      case 'winner':
+        await emailService.statusUpdateMail(adminData, movie);
+        break;
+      default:
+        throw new AppError(400, `wrong movie status`);
     }
-    case 'rejected':
-    case 'accepted':
-    case 'selected':
-    case 'winner':
-      await emailService.statusUpdateMail(adminData, movie);
-      break;
-    default:
-      throw new AppError(400, `wrong movie status`);
   }
 
-  //TODO add transaction
   const affectedRows = await movieModel.update(id, request);
-  if (affectedRows === 0) {
-    throw new AppError(404, `movie not found`);
-  }
   return affectedRows;
 };
 
