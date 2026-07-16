@@ -7,7 +7,9 @@ import { defineConfig } from 'eslint/config';
 export default defineConfig(
   // 1. Global ignores (replaces .eslintignore)
   {
-    ignores: ['dist', 'node_modules'],
+    // Les tests sont exécutés par vitest et formatés par prettier, mais pas lintés :
+    // les mocks (vi.fn(), casts) sont incompatibles avec les règles type-aware du prod.
+    ignores: ['dist', 'node_modules', '**/*.test.ts', '**/*.spec.ts'],
   },
 
   // 2. Base ESLint and TypeScript configurations
