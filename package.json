@@ -9,6 +9,9 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "format": "npx prettier --write \"src/**/*.ts\"",
     "prepare": "husky",
     "seed": "tsx --env-file=.env src/database/seed.ts"
