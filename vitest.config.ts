@@ -4,10 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // Variables d'environnement nécessaires aux modules testés (ex: jwt.service)
-    env: {
-      JWT_SECRET: 'test-secret',
-      NODE_ENV: 'test',
-    },
+    // Charge .env.test (base de test + secrets) avant chaque fichier de test.
+    setupFiles: ['./vitest.setup.ts'],
   },
 });
