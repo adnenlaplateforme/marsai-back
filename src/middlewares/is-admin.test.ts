@@ -29,7 +29,7 @@ describe('isAdmin', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  it("répond 403 quand le rôle admin est absent", () => {
+  it('répond 403 quand le rôle admin est absent', () => {
     const req = mockReq([Role.Jury]);
     const res = mockRes();
     const next = vi.fn() as NextFunction;

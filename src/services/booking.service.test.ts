@@ -112,7 +112,7 @@ describe('bookingService.create', () => {
     expect(result).toBe(42);
   });
 
-  it("crée la réservation sans email quand le participant est introuvable", async () => {
+  it('crée la réservation sans email quand le participant est introuvable', async () => {
     vi.mocked(eventModel.findById).mockResolvedValue(bookableEvent);
     vi.mocked(bookingModel.countByEventId).mockResolvedValue(5);
     vi.mocked(bookingModel.findByParticipantAndEvent).mockResolvedValue(null);

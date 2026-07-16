@@ -81,7 +81,7 @@ describe('movieService.create', () => {
     expect(result).toEqual({ movieId: 10 });
   });
 
-  it('effectue un rollback et propage l\'erreur en cas d\'échec', async () => {
+  it("effectue un rollback et propage l'erreur en cas d'échec", async () => {
     vi.mocked(movieModel.getBySlug).mockResolvedValue(null);
     const dbError = new Error('insert failed');
     vi.mocked(movieModel.create).mockRejectedValue(dbError);
@@ -175,7 +175,9 @@ describe('movieService.adminUpdate', () => {
     vi.mocked(movieModel.getById).mockResolvedValue(null);
 
     await expect(
-      movieService.adminUpdate(1, { adminData: { adminStatus: 'accepted' } } as never),
+      movieService.adminUpdate(1, {
+        adminData: { adminStatus: 'accepted' },
+      } as never),
     ).rejects.toThrowError(new AppError(404, 'film not found'));
   });
 
@@ -195,7 +197,7 @@ describe('movieService.adminUpdate', () => {
     expect(result).toBe(1);
   });
 
-  it("envoie un mail de statut pour un statut final (accepted)", async () => {
+  it('envoie un mail de statut pour un statut final (accepted)', async () => {
     vi.mocked(movieModel.getById).mockResolvedValue({ id: 7 } as never);
     vi.mocked(movieModel.update).mockResolvedValue(1);
 

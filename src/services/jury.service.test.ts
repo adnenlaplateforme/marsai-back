@@ -65,7 +65,7 @@ describe('juryService.create', () => {
     expect(db.rollback).not.toHaveBeenCalled();
   });
 
-  it('effectue un rollback et propage l\'erreur en cas d\'échec', async () => {
+  it("effectue un rollback et propage l'erreur en cas d'échec", async () => {
     vi.mocked(juryInviteModel.findByToken).mockResolvedValue({
       email: 'jury@test.com',
     } as never);

@@ -52,7 +52,7 @@ describe('subscriberService.unsubscribe', () => {
     vi.clearAllMocks();
   });
 
-  it('supprime l\'abonné et retourne le nombre de lignes affectées', async () => {
+  it("supprime l'abonné et retourne le nombre de lignes affectées", async () => {
     vi.mocked(subscriberModel.remove).mockResolvedValue(1);
 
     const result = await subscriberService.unsubscribe(sub);

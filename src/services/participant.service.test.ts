@@ -12,14 +12,16 @@ describe('participantService.findOrCreate', () => {
     vi.clearAllMocks();
   });
 
-  it("retourne le participant existant sans le recréer", async () => {
+  it('retourne le participant existant sans le recréer', async () => {
     const existing = {
       id: 3,
       firstname: 'Jean',
       lastname: 'Dupont',
       email: 'jean@test.com',
     };
-    vi.mocked(participantModel.findByEmail).mockResolvedValue(existing as never);
+    vi.mocked(participantModel.findByEmail).mockResolvedValue(
+      existing as never,
+    );
 
     const result = await participantService.findOrCreate(
       'Jean',

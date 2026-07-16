@@ -25,7 +25,7 @@ describe('juryInviteService.create', () => {
     vi.clearAllMocks();
   });
 
-  it("lève une AppError 409 quand un email existe déjà (vérification préalable)", async () => {
+  it('lève une AppError 409 quand un email existe déjà (vérification préalable)', async () => {
     vi.mocked(juryModel.findInEmails).mockResolvedValue([
       { email: 'a@test.com' },
     ] as never);

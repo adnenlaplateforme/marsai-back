@@ -25,7 +25,7 @@ describe('errorHandler', () => {
     process.env.NODE_ENV = originalEnv;
   });
 
-  it('utilise le statut/message/détails d\'une AppError', () => {
+  it("utilise le statut/message/détails d'une AppError", () => {
     const res = mockRes();
     const appError = new AppError(404, 'Not found', { field: 'id' });
 
@@ -53,7 +53,7 @@ describe('errorHandler', () => {
     });
   });
 
-  it("expose le message et la stack en environnement de développement", () => {
+  it('expose le message et la stack en environnement de développement', () => {
     process.env.NODE_ENV = 'development';
     const res = mockRes();
     const error = new Error('détail interne');
