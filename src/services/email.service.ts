@@ -40,14 +40,19 @@ if (process.env.NODE_ENV === 'development') {
       pass: process.env.MAILER_PASS,
     },
     debug: false,
-    logger: true,
+    logger: process.env.NODE_ENV !== 'test',
   });
 
-  try {
-    await transporter.verify();
-    console.info('Maileroo SMTP connected successfully');
-  } catch (e) {
-    console.error('Maileroo connection failed:', e);
+  // En test, on n'ouvre aucune connexion SMTP : ce module est importé
+  // transitivement par `app`, et le verify() échouerait sur chaque fichier
+  // de test après plusieurs secondes de timeout réseau.
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      await transporter.verify();
+      console.info('Maileroo SMTP connected successfully');
+    } catch (e) {
+      console.error('Maileroo connection failed:', e);
+    }
   }
 }
 
