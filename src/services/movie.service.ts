@@ -86,7 +86,10 @@ const update = async (
     });
     rest.slug = slug;
   }
-  const affectedRows = await movieModel.update(id, rest as Partial<MovieRequest>);
+  const affectedRows = await movieModel.update(
+    id,
+    rest as Partial<MovieRequest>,
+  );
   if (stillsUrls && stillsUrls.length > 0) {
     await imageModel.remove(id);
     await imageModel.insertMultiple(stillsUrls, id);

@@ -128,11 +128,20 @@ const remove = async (id: number): Promise<number> => {
   return result.affectedRows;
 };
 
-const update = async (id: number, movie: Partial<MovieRequest>): Promise<number> => {
+const update = async (
+  id: number,
+  movie: Partial<MovieRequest>,
+): Promise<number> => {
   const fields: string[] = [];
   const values: (string | number | Date | boolean)[] = [];
 
-  const { token: _token, stillsUrls: _stills, director: _dir, collaborators: _collab, ...movieCleaned } = movie;
+  const {
+    token: _token,
+    stillsUrls: _stills,
+    director: _dir,
+    collaborators: _collab,
+    ...movieCleaned
+  } = movie;
   for (const [key, value] of Object.entries(movieCleaned)) {
     if (value === undefined) continue;
     fields.push(`${toSnakeCase(key)} = ?`);
