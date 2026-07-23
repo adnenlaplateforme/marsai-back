@@ -143,4 +143,15 @@ describe('bookingService.unsubscribe', () => {
     expect(bookingModel.remove).toHaveBeenCalledWith(7);
     expect(result).toBe(1);
   });
+
+  it('lève une AppError 400 quand le token est invalide ou expiré', async () => {
+    vi.mocked(jwtService.verify).mockImplementation(() => {
+      throw new Error('jwt expired');
+    });
+
+    await expect(bookingService.unsubscribe('bad-token')).rejects.toThrowError(
+      new AppError(400, 'Invalid or expired token'),
+    );
+    expect(bookingModel.remove).not.toHaveBeenCalled();
+  });
 });

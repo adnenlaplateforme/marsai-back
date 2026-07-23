@@ -4,6 +4,7 @@ import emailService from './email.service.js';
 import eventModel from '../models/event.model.js';
 import participantModel from '../models/participant.model.js';
 import jwtService from './jwt.service.js';
+import type TokenPayload from '../types/interfaces/token-payload.interface.js';
 
 const create = async (
   eventId: number,
@@ -50,7 +51,15 @@ const create = async (
 };
 
 const unsubscribe = async (token: string): Promise<number> => {
-  const payload = jwtService.verify(token);
+  // Le lien de désinscription vient d'un email et vit 7 jours : un token
+  // expiré ou trafiqué est une erreur d'appelant, pas une erreur serveur.
+  let payload: TokenPayload;
+  try {
+    payload = jwtService.verify(token);
+  } catch {
+    throw new AppError(400, 'Invalid or expired token');
+  }
+
   return await bookingModel.remove(payload.id);
 };
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import type { RowDataPacket } from 'mysql2/promise';
 
 // POST /bookings envoie un email de confirmation. Le vrai service ouvre un
@@ -313,5 +314,37 @@ describe('GET /bookings/unsubscribe/:token', () => {
 
     expect(res.status).toBe(200);
     expect(await countRows('booking')).toBe(0);
+  });
+
+  it('renvoie 400 quand le token est illisible', async () => {
+    const res = await request(app).get('/bookings/unsubscribe/pas-un-token');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid or expired token' });
+  });
+
+  it('renvoie 400 quand le token est signé avec un autre secret', async () => {
+    const token = jwt.sign({ id: 1 }, 'mauvais-secret', { expiresIn: '7d' });
+
+    const res = await request(app).get(`/bookings/unsubscribe/${token}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid or expired token' });
+  });
+
+  it('renvoie 400 et ne supprime rien quand le token est expiré', async () => {
+    // Le lien de désinscription vit 7 jours : un lien plus ancien cliqué depuis
+    // un vieil email ne doit pas produire une erreur serveur.
+    const event = await createEvent();
+    const booking = await createBooking(event.id);
+    const token = jwt.sign({ id: booking.id }, process.env.JWT_SECRET, {
+      expiresIn: '-1s',
+    });
+
+    const res = await request(app).get(`/bookings/unsubscribe/${token}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid or expired token' });
+    expect(await countRows('booking')).toBe(1);
   });
 });
