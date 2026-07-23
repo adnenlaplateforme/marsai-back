@@ -8,5 +8,9 @@ export default defineConfig({
     globalSetup: ['./vitest.global-setup.ts'],
     // Charge .env.test (base de test + secrets) avant chaque fichier de test.
     setupFiles: ['./vitest.setup.ts'],
+    // Les tests d'intégration partagent une seule base et la vident entre chaque
+    // test (resetDatabase). Deux fichiers en parallèle se videraient la base
+    // l'un sous l'autre : on les exécute donc l'un après l'autre.
+    fileParallelism: false,
   },
 });

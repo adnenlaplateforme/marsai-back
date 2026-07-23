@@ -13,6 +13,10 @@ const getCookie = (res: request.Response, name: string): string | undefined => {
   return cookies?.find((cookie) => cookie.startsWith(`${name}=`));
 };
 
+/** Extrait la valeur d'un cookie, l'en-tête ayant la forme `nom=valeur; Path=...`. */
+const getCookieValue = (res: request.Response, name: string): string =>
+  getCookie(res, name)?.split(';')[0]?.replace(`${name}=`, '') ?? '';
+
 /** Un cookie purgé par clearCookie est renvoyé vide avec une date passée. */
 const isCleared = (cookie: string | undefined): boolean =>
   cookie !== undefined && cookie.includes('Expires=Thu, 01 Jan 1970');
@@ -51,9 +55,7 @@ describe('POST /auth/login', () => {
       .post('/auth/login')
       .send({ email: user.email, password: user.password });
 
-    const cookie = getCookie(res, 'accessToken') as string;
-    const token = cookie.split(';')[0].replace('accessToken=', '');
-    const payload = jwtService.verify(token);
+    const payload = jwtService.verify(getCookieValue(res, 'accessToken'));
 
     expect(payload.id).toBe(user.id);
     expect(payload.roles).toEqual([Role.Jury]);

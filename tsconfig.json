@@ -43,9 +43,5 @@
    "include": [
       "src/", "config/",
   ],
-   "exclude": [
-      "src/**/*.test.ts",
-      "src/**/*.spec.ts",
-  ],
 
 }
