@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AppError from '../helpers/AppError.js';
+import type { Event } from '../types/interfaces/event.interface.js';
 
 vi.mock('../models/booking.model.js', () => ({
   default: {
@@ -35,7 +36,8 @@ const bookableEvent = {
   description: 'Une belle projection',
   is_bookable: true,
   capacity: 100,
-} as never;
+  // Event étend RowDataPacket : on ne renseigne que les champs utilisés ici.
+} as unknown as Event;
 
 describe('bookingService.create', () => {
   beforeEach(() => {
