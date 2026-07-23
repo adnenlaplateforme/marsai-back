@@ -330,6 +330,64 @@ describe('PUT /events/:id', () => {
   });
 });
 
+describe('identifiant invalide dans l’URL', () => {
+  // Avant la garde parseId, les routes passant par db.query interpolaient NaN
+  // dans le SQL et répondaient 500 : MySQL prenait `NaN` pour un nom de colonne.
+  const routes = [
+    ['GET', '/events/abc'],
+    ['GET', '/events/abc/remaining-seats'],
+    ['GET', '/events/1.5'],
+    ['GET', '/events/0'],
+    ['GET', '/events/-1'],
+  ] as const;
+
+  it.each(routes)('%s %s renvoie 400', async (_methode, url) => {
+    const res = await request(app).get(url);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid event id' });
+  });
+
+  it('ne tronque pas un identifiant partiellement numérique', async () => {
+    // parseInt('12abc') vaut 12 : l'ancienne implémentation aurait servi
+    // l'événement 12 au lieu de rejeter la requête.
+    const event = await createEvent();
+
+    const res = await request(app).get(`/events/${event.id}abc`);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid event id' });
+  });
+
+  it('renvoie 400 sur PUT avec un identifiant non numérique', async () => {
+    const res = await request(app)
+      .put('/events/abc')
+      .set('Cookie', adminCookie)
+      .send({ capacity: 50 });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid event id' });
+  });
+
+  it('renvoie 400 sur DELETE avec un identifiant non numérique', async () => {
+    const res = await request(app)
+      .delete('/events/abc')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid event id' });
+  });
+
+  it("contrôle l'authentification avant l'identifiant", async () => {
+    // isLogged est déclaré avant le contrôleur : un id invalide sans cookie
+    // reçoit 401, l'API ne révèle rien de plus à un appelant anonyme.
+    const res = await request(app).delete('/events/abc');
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ message: 'Token missing' });
+  });
+});
+
 describe('DELETE /events/:id', () => {
   it("supprime l'événement et répond 204", async () => {
     const event = await createEvent();
