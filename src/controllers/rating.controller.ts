@@ -35,10 +35,30 @@ const getMyRating: RequestHandler = async (req, res, next) => {
   }
 };
 
+const getRatedMovies: RequestHandler = async (req, res, next) => {
+  try {
+    const movies = await ratingService.getRatedMoviesByJury(req.user_id);
+    return res.status(200).json(movies);
+  } catch (e) {
+    next(e);
+  }
+};
+
+const getMoviesToRate: RequestHandler = async (req, res, next) => {
+  try {
+    const movies = await ratingService.getMoviesToRateByJury(req.user_id);
+    return res.status(200).json(movies);
+  } catch (e) {
+    next(e);
+  }
+};
+
 const ratingController = {
   rateMovie,
   getRatings,
   getMyRating,
+  getRatedMovies,
+  getMoviesToRate,
 };
 
 export default ratingController;

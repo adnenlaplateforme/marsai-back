@@ -10,6 +10,8 @@ vi.mock('../models/rating.model.js', () => ({
     update: vi.fn(),
     create: vi.fn(),
     findAllByMovieId: vi.fn(),
+    findRatedMoviesByUserId: vi.fn(),
+    findMoviesToRateByUserId: vi.fn(),
   },
 }));
 
@@ -118,5 +120,56 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
 
     expect(ratingModel.getByMovieIdAndUserId).toHaveBeenCalledWith(10, 5);
     expect(result).toBe(rating);
+  });
+});
+
+describe('ratingService.getRatedMoviesByJury', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('retourne les films notés par le juré', async () => {
+    const movies = [
+      { id: 1, english_title: 'First', note: 8 },
+      { id: 2, english_title: 'Second', note: 5 },
+    ];
+    vi.mocked(ratingModel.findRatedMoviesByUserId).mockResolvedValue(
+      movies as never,
+    );
+
+    const result = await ratingService.getRatedMoviesByJury(10);
+
+    expect(ratingModel.findRatedMoviesByUserId).toHaveBeenCalledWith(10);
+    expect(result).toBe(movies);
+  });
+
+  it("retourne un tableau vide quand le juré n'a rien noté", async () => {
+    vi.mocked(ratingModel.findRatedMoviesByUserId).mockResolvedValue([]);
+
+    await expect(ratingService.getRatedMoviesByJury(10)).resolves.toEqual([]);
+  });
+});
+
+describe('ratingService.getMoviesToRateByJury', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('retourne les films restant à noter', async () => {
+    const movies = [{ id: 3, english_title: 'Third' }];
+    vi.mocked(ratingModel.findMoviesToRateByUserId).mockResolvedValue(
+      movies as never,
+    );
+
+    const result = await ratingService.getMoviesToRateByJury(10);
+
+    expect(ratingModel.findMoviesToRateByUserId).toHaveBeenCalledWith(10);
+    expect(result).toBe(movies);
+  });
+
+  it('retourne un tableau vide quand tout est noté', async () => {
+    vi.mocked(ratingModel.findMoviesToRateByUserId).mockResolvedValue([]);
+
+    await expect(ratingService.getMoviesToRateByJury(10)).resolves.toEqual([]);
   });
 });

@@ -24,3 +24,15 @@ export default interface Movie extends RowDataPacket {
 }
 
 export type MovieWithDirector = Movie & { director: Director };
+
+/**
+ * Un film accompagné de la note qu'un juré donné lui a posée.
+ *
+ * `rated_at` reprend `rating.updated_at` et non `created_at` : une note peut
+ * être corrigée, c'est la date du dernier passage du juré qui l'intéresse.
+ */
+export type MovieWithRating = MovieWithDirector & {
+  note: number;
+  comment: string | null;
+  rated_at: Date;
+};
