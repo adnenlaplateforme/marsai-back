@@ -21,6 +21,11 @@ movieRouter.get(
   validateParamsAndQuery(RandomMovieRequestSchema),
   movieController.getRandom,
 );
+// Déclarées avant `/:id` : ce sont des segments uniques, la route paramétrée
+// les capterait sinon avec un id valant « rated » ou « to-rate ».
+movieRouter.get('/rated', isLogged, isJury, ratingController.getRatedMovies);
+movieRouter.get('/to-rate', isLogged, isJury, ratingController.getMoviesToRate);
+
 movieRouter.post(
   '/',
   upload,

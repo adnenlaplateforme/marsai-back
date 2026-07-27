@@ -3,6 +3,10 @@ import ratingModel from '../models/rating.model.js';
 import AppError from '../helpers/AppError.js';
 import type { RatingRequest } from '../types/schemas/rating-request.schema.js';
 import type Rate from '../types/interfaces/rate.interface.js';
+import type {
+  MovieWithDirector,
+  MovieWithRating,
+} from '../types/interfaces/Movie.interface.js';
 
 const rateMovieById = async (
   id: number,
@@ -69,10 +73,24 @@ const getCurrentJuryRatingByMovieId = async (
   return rating;
 };
 
+const getRatedMoviesByJury = async (
+  userId: number,
+): Promise<MovieWithRating[]> => {
+  return await ratingModel.findRatedMoviesByUserId(userId);
+};
+
+const getMoviesToRateByJury = async (
+  userId: number,
+): Promise<MovieWithDirector[]> => {
+  return await ratingModel.findMoviesToRateByUserId(userId);
+};
+
 const ratingService = {
   rateMovieById,
   getRatingsByMovieId,
   getCurrentJuryRatingByMovieId,
+  getRatedMoviesByJury,
+  getMoviesToRateByJury,
 };
 
 export default ratingService;
