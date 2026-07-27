@@ -83,3 +83,40 @@ describe('ratingService.getRatingsByMovieId', () => {
     expect(result).toBe(ratings);
   });
 });
+
+describe('ratingService.getCurrentJuryRatingByMovieId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("lève une AppError 404 quand le film n'existe pas", async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue(null);
+
+    await expect(
+      ratingService.getCurrentJuryRatingByMovieId(1, 10),
+    ).rejects.toThrowError(new AppError(404, 'Movie not found'));
+    expect(ratingModel.getByMovieIdAndUserId).not.toHaveBeenCalled();
+  });
+
+  it("lève une AppError 404 quand le juré n'a pas encore noté le film", async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(null);
+
+    await expect(
+      ratingService.getCurrentJuryRatingByMovieId(5, 10),
+    ).rejects.toThrowError(new AppError(404, 'Rating not found'));
+  });
+
+  it('retourne la note du juré courant', async () => {
+    const rating = { id: 99, note: 8, comment: 'bien' };
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(
+      rating as never,
+    );
+
+    const result = await ratingService.getCurrentJuryRatingByMovieId(5, 10);
+
+    expect(ratingModel.getByMovieIdAndUserId).toHaveBeenCalledWith(10, 5);
+    expect(result).toBe(rating);
+  });
+});

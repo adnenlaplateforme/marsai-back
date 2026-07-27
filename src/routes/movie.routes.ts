@@ -38,6 +38,13 @@ movieRouter.post(
 
 movieRouter.get('/:id/ratings', ratingController.getRatings);
 
+movieRouter.get(
+  '/:id/ratings/me',
+  isLogged,
+  isJury,
+  ratingController.getMyRating,
+);
+
 movieRouter.delete('/:id', movieController.remove);
 movieRouter.put('/:id', isLogged, isAdmin, movieController.adminUpdate);
 movieRouter.patch(

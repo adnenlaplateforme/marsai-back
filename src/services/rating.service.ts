@@ -45,9 +45,34 @@ const getRatingsByMovieId = async (id: number): Promise<Rate[]> => {
   return await ratingModel.findAllByMovieId(movie.id!);
 };
 
+/**
+ * Renvoie la note posée par le juré courant sur un film.
+ *
+ * Sert au front à savoir s'il doit proposer un formulaire vierge ou préremplir
+ * la note existante : `rateMovieById` écrase une note déjà posée plutôt que
+ * d'en créer une seconde.
+ */
+const getCurrentJuryRatingByMovieId = async (
+  id: number,
+  userId: number,
+): Promise<Rate> => {
+  const movie = await movieModel.getById(id);
+  if (!movie) {
+    throw new AppError(404, 'Movie not found');
+  }
+
+  const rating = await ratingModel.getByMovieIdAndUserId(userId, movie.id!);
+  if (!rating) {
+    throw new AppError(404, 'Rating not found');
+  }
+
+  return rating;
+};
+
 const ratingService = {
   rateMovieById,
   getRatingsByMovieId,
+  getCurrentJuryRatingByMovieId,
 };
 
 export default ratingService;
