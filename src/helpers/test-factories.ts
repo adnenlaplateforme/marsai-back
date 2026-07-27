@@ -161,6 +161,159 @@ export const createBooking = async (
   return { id: booking.insertId, participantId: participant.insertId };
 };
 
+export type MovieStatusValue =
+  | 'pending_review'
+  | 'pending_change'
+  | 'accepted'
+  | 'selected'
+  | 'winner'
+  | 'rejected';
+
+export interface TestMovie {
+  id: number;
+  slug: string;
+  originalTitle: string;
+  englishTitle: string;
+  directorId: number;
+}
+
+interface TestCollaborator {
+  firstname?: string;
+  lastname?: string;
+  email?: string;
+  contribution?: string;
+}
+
+interface CreateMovieOptions {
+  slug?: string;
+  originalTitle?: string;
+  englishTitle?: string;
+  isHybrid?: boolean;
+  language?: string;
+  status?: MovieStatusValue;
+  submittedAt?: string;
+  duration?: number;
+  hasSubs?: boolean;
+  director?: TestCollaborator;
+  collaborators?: TestCollaborator[];
+  stills?: string[];
+}
+
+/**
+ * Crée un film complet : la ligne `movie`, son réalisateur, ses éventuels
+ * collaborateurs et ses photos.
+ *
+ * Le réalisateur n'est pas optionnel : `getAll`, `getAllSorted`, `getById` et
+ * `getRandom` font tous un INNER JOIN sur `collaborator` avec
+ * `is_director = true`. Un film sans réalisateur est invisible pour l'API,
+ * quelle que soit la route.
+ *
+ * `slug` est UNIQUE en base : le passer explicitement dès qu'un test crée
+ * plusieurs films.
+ */
+export const createMovie = async ({
+  slug = 'film-de-test',
+  originalTitle = 'Film de test',
+  englishTitle = 'Test Movie',
+  isHybrid = false,
+  language = 'FR',
+  status = 'pending_review',
+  submittedAt = '2026-01-01 10:00:00',
+  duration = 60,
+  hasSubs = true,
+  director = {},
+  collaborators = [],
+  stills = [],
+}: CreateMovieOptions = {}): Promise<TestMovie> => {
+  const [movie] = await db.execute<ResultSetHeader>(
+    `INSERT INTO \`movie\`
+      (\`original_title\`, \`english_title\`, \`slug\`, \`submitted_at\`, \`video_path\`, \`cover_path\`,
+       \`duration\`, \`is_hybrid\`, \`language\`, \`original_synopsis\`, \`english_synopsis\`,
+       \`creative_process\`, \`ai_tools\`, \`has_subs\`, \`status\`)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      originalTitle,
+      englishTitle,
+      slug,
+      submittedAt,
+      'https://s3.test/video.mp4',
+      'https://s3.test/cover.jpg',
+      duration,
+      isHybrid,
+      language,
+      'Synopsis original',
+      'English synopsis',
+      'Processus créatif',
+      'Outils IA',
+      hasSubs,
+      status,
+    ],
+  );
+  const movieId = movie.insertId;
+
+  const [dir] = await db.execute<ResultSetHeader>(
+    `INSERT INTO \`collaborator\`
+      (\`firstname\`, \`lastname\`, \`gender\`, \`email\`, \`contribution\`, \`movie_id\`, \`is_director\`)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      director.firstname ?? 'Jane',
+      director.lastname ?? 'Realisatrice',
+      'Mme',
+      director.email ?? 'realisatrice@test.com',
+      'Director',
+      movieId,
+      true,
+    ],
+  );
+
+  for (const collaborator of collaborators) {
+    await db.execute(
+      `INSERT INTO \`collaborator\`
+        (\`firstname\`, \`lastname\`, \`gender\`, \`email\`, \`contribution\`, \`movie_id\`, \`is_director\`)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        collaborator.firstname ?? 'Bob',
+        collaborator.lastname ?? 'Collaborateur',
+        'Mr',
+        collaborator.email ?? 'collaborateur@test.com',
+        collaborator.contribution ?? 'Montage',
+        movieId,
+        false,
+      ],
+    );
+  }
+
+  for (const path of stills) {
+    await db.execute('INSERT INTO `image` (`path`, `movie_id`) VALUES (?, ?)', [
+      path,
+      movieId,
+    ]);
+  }
+
+  return {
+    id: movieId,
+    slug,
+    originalTitle,
+    englishTitle,
+    directorId: dir.insertId,
+  };
+};
+
+/**
+ * Ouvre une demande de modification pour un film : c'est la ligne `movie_update`
+ * qu'exige `PATCH /movies/:id`, dont le token circule par email.
+ */
+export const createMovieUpdateToken = async (
+  movieId: number,
+  token = 'token-de-modification',
+): Promise<string> => {
+  await db.execute(
+    'INSERT INTO `movie_update` (`movie_id`, `token`) VALUES (?, ?)',
+    [movieId, token],
+  );
+  return token;
+};
+
 /**
  * Forge un cookie accessToken valide pour un utilisateur, afin de tester les
  * routes protégées sans passer par un vrai /auth/login à chaque test.
