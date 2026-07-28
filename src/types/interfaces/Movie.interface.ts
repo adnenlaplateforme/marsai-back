@@ -43,7 +43,7 @@ export type MovieWithRating = MovieWithDirector & {
  * `average` vaut null tant qu'aucun juré n'a noté le film : celui-ci reste dans
  * le classement, pour que l'admin distingue « pas encore noté » de « absent ».
  */
-export type MovieRatingAverage = Movie & {
+export type MovieRatingAverage = MovieWithDirector & {
   average: number | null;
   votes: number;
 };

@@ -114,18 +114,23 @@ const findMoviesToRateByUserId = async (
  * que mysql2 rend en chaîne (« 8.50 »). Sans lui, le front comparerait et
  * trierait des chaînes.
  *
- * Aucune jointure sur le réalisateur, contrairement aux listes jury : le
- * classement ne l'affiche pas. L'ajouter obligerait à trancher entre un INNER
- * JOIN, qui écarterait un film du palmarès, et un LEFT JOIN, qui alourdit le
- * regroupement — pour une donnée dont la route n'a pas l'usage.
+ * Le réalisateur est joint comme dans les listes jury. L'INNER JOIN ne peut pas
+ * dupliquer les lignes de notes — et donc gonfler `votes` — puisqu'un film n'a
+ * qu'un réalisateur : le schéma de soumission n'en accepte qu'un, inséré dans
+ * la transaction de création du film.
+ *
+ * `c.id` doit figurer dans le GROUP BY : sous ONLY_FULL_GROUP_BY, les colonnes
+ * du réalisateur ne sont pas fonctionnellement dépendantes de `m.id`. Le
+ * regroupement reste le même, un film ne comptant qu'un réalisateur.
  */
 const findMoviesWithRatingAverage = async (): Promise<MovieRatingAverage[]> => {
-  const sql = `SELECT m.*, \
+  const sql = `SELECT m.*, ${directorJson}, \
     CAST(ROUND(AVG(r.note), 2) AS DOUBLE) AS average, \
     COUNT(r.id) AS votes \
     FROM movie m \
+    INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
     LEFT JOIN rating r ON r.movie_id = m.id \
-    GROUP BY m.id \
+    GROUP BY m.id, c.id \
     ORDER BY average DESC, votes DESC, m.id ASC`;
 
   const [result] = await db.query<MovieRatingAverage[]>(sql);

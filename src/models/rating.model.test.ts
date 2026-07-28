@@ -115,7 +115,17 @@ describe('SQL du classement par moyenne', () => {
     expect(ranking.map((m) => m.id)).toEqual([best, worst]);
     expect(ranking[0]!.average).toBe(8.5);
     expect(ranking[0]!.votes).toBe(2);
+    expect(ranking[0]!.director.firstname).toBe('Jane');
     expect(ranking[1]!.average).toBe(5.5);
+  });
+
+  it('exclut les films sans réalisateur, comme partout ailleurs dans l’API', async () => {
+    const jury = await createUser({ email: 'j7@test.com', roles: [Role.Jury] });
+    const orphan = await insertMovie('film-classement-sans-realisateur', false);
+
+    await ratingModel.create(jury.id, orphan, 9);
+
+    expect(await ratingModel.findMoviesWithRatingAverage()).toEqual([]);
   });
 
   it("garde les films qu'aucun juré n'a notés, en fin de classement", async () => {

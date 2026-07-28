@@ -50,6 +50,7 @@ describe('GET /movies/ratings/average', () => {
     const favori = await createMovie({
       slug: 'film-favori',
       originalTitle: 'Le Favori',
+      director: { firstname: 'Agnès', lastname: 'Varda' },
     });
     const outsider = await createMovie({
       slug: 'film-outsider',
@@ -71,6 +72,7 @@ describe('GET /movies/ratings/average', () => {
       original_title: 'Le Favori',
       average: 8.5,
       votes: 2,
+      director: { firstname: 'Agnès', lastname: 'Varda' },
     });
     expect(res.body[1]).toMatchObject({
       id: outsider.id,
