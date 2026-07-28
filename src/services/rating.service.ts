@@ -4,6 +4,7 @@ import AppError from '../helpers/AppError.js';
 import type { RatingRequest } from '../types/schemas/rating-request.schema.js';
 import type Rate from '../types/interfaces/rate.interface.js';
 import type {
+  MovieRatingAverage,
   MovieWithDirector,
   MovieWithRating,
 } from '../types/interfaces/Movie.interface.js';
@@ -85,12 +86,21 @@ const getMoviesToRateByJury = async (
   return await ratingModel.findMoviesToRateByUserId(userId);
 };
 
+/**
+ * Le classement des films par moyenne des notes du jury, réservé à l'admin :
+ * il révèle le palmarès en cours de délibération, qu'un juré ne doit pas voir.
+ */
+const getMoviesRatingAverage = async (): Promise<MovieRatingAverage[]> => {
+  return await ratingModel.findMoviesWithRatingAverage();
+};
+
 const ratingService = {
   rateMovieById,
   getRatingsByMovieId,
   getCurrentJuryRatingByMovieId,
   getRatedMoviesByJury,
   getMoviesToRateByJury,
+  getMoviesRatingAverage,
 };
 
 export default ratingService;
