@@ -88,3 +88,84 @@ describe('SQL des listes jury', () => {
     expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
   });
 });
+
+// Toute la logique du classement admin tient dans une seule requête : moyenne,
+// comptage, films non notés conservés par le LEFT JOIN et ordre du palmarès.
+// Un mock du modèle ne vérifierait rien de tout cela.
+describe('SQL du classement par moyenne', () => {
+  it('classe les films du mieux noté au moins bien noté', async () => {
+    const first = await createUser({
+      email: 'j1@test.com',
+      roles: [Role.Jury],
+    });
+    const second = await createUser({
+      email: 'j2@test.com',
+      roles: [Role.Jury],
+    });
+    const best = await insertMovie('film-favori');
+    const worst = await insertMovie('film-mal-note');
+
+    await ratingModel.create(first.id, best, 8);
+    await ratingModel.create(second.id, best, 9);
+    await ratingModel.create(first.id, worst, 5);
+    await ratingModel.create(second.id, worst, 6);
+
+    const ranking = await ratingModel.findMoviesWithRatingAverage();
+
+    expect(ranking.map((m) => m.id)).toEqual([best, worst]);
+    expect(ranking[0]!.average).toBe(8.5);
+    expect(ranking[0]!.votes).toBe(2);
+    expect(ranking[0]!.director.firstname).toBe('Jane');
+    expect(ranking[1]!.average).toBe(5.5);
+  });
+
+  it('exclut les films sans réalisateur, comme partout ailleurs dans l’API', async () => {
+    const jury = await createUser({ email: 'j7@test.com', roles: [Role.Jury] });
+    const orphan = await insertMovie('film-classement-sans-realisateur', false);
+
+    await ratingModel.create(jury.id, orphan, 9);
+
+    expect(await ratingModel.findMoviesWithRatingAverage()).toEqual([]);
+  });
+
+  it("garde les films qu'aucun juré n'a notés, en fin de classement", async () => {
+    const jury = await createUser({ email: 'j3@test.com', roles: [Role.Jury] });
+    const rated = await insertMovie('film-note-classement');
+    const unrated = await insertMovie('film-jamais-note');
+
+    await ratingModel.create(jury.id, rated, 4);
+
+    const ranking = await ratingModel.findMoviesWithRatingAverage();
+
+    expect(ranking.map((m) => m.id)).toEqual([rated, unrated]);
+    expect(ranking[1]!.average).toBeNull();
+    expect(ranking[1]!.votes).toBe(0);
+  });
+
+  it('arrondit la moyenne à deux décimales et la renvoie en nombre', async () => {
+    const first = await createUser({
+      email: 'j4@test.com',
+      roles: [Role.Jury],
+    });
+    const second = await createUser({
+      email: 'j5@test.com',
+      roles: [Role.Jury],
+    });
+    const third = await createUser({
+      email: 'j6@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await insertMovie('film-moyenne-longue');
+
+    await ratingModel.create(first.id, movie, 1);
+    await ratingModel.create(second.id, movie, 2);
+    await ratingModel.create(third.id, movie, 2);
+
+    const [result] = await ratingModel.findMoviesWithRatingAverage();
+
+    // mysql2 rend les DECIMAL en chaîne : « 1.67 » passerait toEqual mais pas
+    // toBe, et se comparerait mal côté front.
+    expect(result!.average).toBe(1.67);
+    expect(typeof result!.votes).toBe('number');
+  });
+});

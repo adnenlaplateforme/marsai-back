@@ -12,6 +12,7 @@ vi.mock('../models/rating.model.js', () => ({
     findAllByMovieId: vi.fn(),
     findRatedMoviesByUserId: vi.fn(),
     findMoviesToRateByUserId: vi.fn(),
+    findMoviesWithRatingAverage: vi.fn(),
   },
 }));
 
@@ -171,5 +172,32 @@ describe('ratingService.getMoviesToRateByJury', () => {
     vi.mocked(ratingModel.findMoviesToRateByUserId).mockResolvedValue([]);
 
     await expect(ratingService.getMoviesToRateByJury(10)).resolves.toEqual([]);
+  });
+});
+
+describe('ratingService.getMoviesRatingAverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('retourne le classement des films par moyenne', async () => {
+    const ranking = [
+      { id: 1, english_title: 'First', average: 8.5, votes: 4 },
+      { id: 2, english_title: 'Second', average: 6.25, votes: 4 },
+    ];
+    vi.mocked(ratingModel.findMoviesWithRatingAverage).mockResolvedValue(
+      ranking as never,
+    );
+
+    const result = await ratingService.getMoviesRatingAverage();
+
+    expect(ratingModel.findMoviesWithRatingAverage).toHaveBeenCalledWith();
+    expect(result).toBe(ranking);
+  });
+
+  it("retourne un tableau vide quand aucun film n'existe", async () => {
+    vi.mocked(ratingModel.findMoviesWithRatingAverage).mockResolvedValue([]);
+
+    await expect(ratingService.getMoviesRatingAverage()).resolves.toEqual([]);
   });
 });

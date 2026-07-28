@@ -36,3 +36,14 @@ export type MovieWithRating = MovieWithDirector & {
   comment: string | null;
   rated_at: Date;
 };
+
+/**
+ * Un film accompagné de la moyenne des notes du jury.
+ *
+ * `average` vaut null tant qu'aucun juré n'a noté le film : celui-ci reste dans
+ * le classement, pour que l'admin distingue « pas encore noté » de « absent ».
+ */
+export type MovieRatingAverage = MovieWithDirector & {
+  average: number | null;
+  votes: number;
+};

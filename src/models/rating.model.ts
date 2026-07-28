@@ -2,6 +2,7 @@ import type { ResultSetHeader } from 'mysql2';
 import db from '../database/connection.js';
 import type Rate from '../types/interfaces/rate.interface.js';
 import type {
+  MovieRatingAverage,
   MovieWithDirector,
   MovieWithRating,
 } from '../types/interfaces/Movie.interface.js';
@@ -102,6 +103,40 @@ const findMoviesToRateByUserId = async (
   return result;
 };
 
+/**
+ * Le classement du jury : tous les films, leur moyenne et leur nombre de votes.
+ *
+ * LEFT JOIN et non INNER : un film que personne n'a encore noté doit rester
+ * dans la liste, avec `average` à null. MySQL trie les NULL en dernier sur un
+ * ORDER BY décroissant, exactement là où on les veut.
+ *
+ * Le CAST en DOUBLE n'est pas décoratif : ROUND(AVG(...)) produit un DECIMAL,
+ * que mysql2 rend en chaîne (« 8.50 »). Sans lui, le front comparerait et
+ * trierait des chaînes.
+ *
+ * Le réalisateur est joint comme dans les listes jury. L'INNER JOIN ne peut pas
+ * dupliquer les lignes de notes — et donc gonfler `votes` — puisqu'un film n'a
+ * qu'un réalisateur : le schéma de soumission n'en accepte qu'un, inséré dans
+ * la transaction de création du film.
+ *
+ * `c.id` doit figurer dans le GROUP BY : sous ONLY_FULL_GROUP_BY, les colonnes
+ * du réalisateur ne sont pas fonctionnellement dépendantes de `m.id`. Le
+ * regroupement reste le même, un film ne comptant qu'un réalisateur.
+ */
+const findMoviesWithRatingAverage = async (): Promise<MovieRatingAverage[]> => {
+  const sql = `SELECT m.*, ${directorJson}, \
+    CAST(ROUND(AVG(r.note), 2) AS DOUBLE) AS average, \
+    COUNT(r.id) AS votes \
+    FROM movie m \
+    INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
+    LEFT JOIN rating r ON r.movie_id = m.id \
+    GROUP BY m.id, c.id \
+    ORDER BY average DESC, votes DESC, m.id ASC`;
+
+  const [result] = await db.query<MovieRatingAverage[]>(sql);
+  return result;
+};
+
 const ratingModel = {
   getByMovieIdAndUserId,
   update,
@@ -109,6 +144,7 @@ const ratingModel = {
   findAllByMovieId,
   findRatedMoviesByUserId,
   findMoviesToRateByUserId,
+  findMoviesWithRatingAverage,
 };
 
 export default ratingModel;
