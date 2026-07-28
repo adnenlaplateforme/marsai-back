@@ -26,6 +26,15 @@ movieRouter.get(
 movieRouter.get('/rated', isLogged, isJury, ratingController.getRatedMovies);
 movieRouter.get('/to-rate', isLogged, isJury, ratingController.getMoviesToRate);
 
+// Le palmarès en cours de délibération : réservé à l'admin, un juré ne doit pas
+// voir les moyennes avant d'avoir posé les siennes.
+movieRouter.get(
+  '/ratings/average',
+  isLogged,
+  isAdmin,
+  ratingController.getRatingAverages,
+);
+
 movieRouter.post(
   '/',
   upload,

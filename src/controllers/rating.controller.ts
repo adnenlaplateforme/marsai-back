@@ -53,12 +53,22 @@ const getMoviesToRate: RequestHandler = async (req, res, next) => {
   }
 };
 
+const getRatingAverages: RequestHandler = async (_req, res, next) => {
+  try {
+    const ranking = await ratingService.getMoviesRatingAverage();
+    return res.status(200).json(ranking);
+  } catch (e) {
+    next(e);
+  }
+};
+
 const ratingController = {
   rateMovie,
   getRatings,
   getMyRating,
   getRatedMovies,
   getMoviesToRate,
+  getRatingAverages,
 };
 
 export default ratingController;
