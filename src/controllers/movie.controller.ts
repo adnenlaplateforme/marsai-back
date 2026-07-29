@@ -6,6 +6,19 @@ import { parseId } from '../helpers/parse-id.js';
 
 import movieUpdateService from '../services/movie-update.service.js';
 
+/**
+ * `search` est facultatif pour le client, mais obligatoire pour le modèle, qui
+ * l'entoure de `%` sans le vérifier. Absent, la concaténation donnait
+ * `'%undefined%'` : la liste sortait vide alors que la base contenait des
+ * films, et le front devait envoyer un `search=` vide pour voir quoi que ce
+ * soit. Une chaîne vide donne `'%%'`, qui laisse tout passer.
+ *
+ * Le type d'Express admet aussi un tableau (`?search=a&search=b`) : la chaîne
+ * vide est plus honnête que la concaténation qu'en ferait le modèle.
+ */
+const parseSearch = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
+
 const create: RequestHandler = async (req, res, next) => {
   try {
     console.info(req.body);
@@ -33,7 +46,7 @@ const getAll: RequestHandler = async (req, res, next) => {
     const response = await movieService.getAll(
       pageAsInt,
       type as string,
-      search as string,
+      parseSearch(search),
     );
     return res.send(response);
   } catch (e) {
@@ -107,7 +120,7 @@ const getAllSorted: RequestHandler = async (req, res, next) => {
       sort as string,
       order as string,
       onlyDraftsAsBool,
-      search as string,
+      parseSearch(search),
     );
     return res.send(response);
   } catch (e) {

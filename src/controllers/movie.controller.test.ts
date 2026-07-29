@@ -107,6 +107,21 @@ describe('GET /movies', () => {
     expect(res.body.data).toEqual([]);
   });
 
+  /**
+   * Le paramètre est facultatif : l'omettre doit lister tous les films, pas
+   * en renvoyer zéro.
+   */
+  it('liste tous les films quand search est absent', async () => {
+    await createMovie({ slug: 'un', englishTitle: 'Un' });
+    await createMovie({ slug: 'deux', englishTitle: 'Deux' });
+
+    const res = await request(app).get('/movies?page=1&type=all');
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(res.body.data).toHaveLength(2);
+  });
+
   it('refuse une page non numérique', async () => {
     const res = await request(app).get('/movies?page=abc&type=all&search=');
 
@@ -164,6 +179,16 @@ describe('GET /movies/sort', () => {
     expect(
       res.body.data.map((m: { english_title: string }) => m.english_title),
     ).toEqual(['Beta', 'Alpha']);
+  });
+
+  it('liste tous les films quand search est absent', async () => {
+    await createMovie({ slug: 'un', englishTitle: 'Un' });
+    await createMovie({ slug: 'deux', englishTitle: 'Deux' });
+
+    const res = await sorted('page=1&sort=id&order=ASC&onlyDrafts=false');
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
   });
 
   /**
