@@ -278,6 +278,26 @@ describe('POST /movies', () => {
 });
 
 describe('DELETE /movies/:id', () => {
+  it('refuse un visiteur anonyme', async () => {
+    const movie = await createMovie();
+
+    const res = await request(app).delete(`/movies/${movie.id}`);
+
+    expect(res.status).toBe(401);
+    expect(await countRows('movie')).toBe(1);
+  });
+
+  it('refuse un juré : supprimer une candidature est un geste admin', async () => {
+    const movie = await createMovie();
+
+    const res = await request(app)
+      .delete(`/movies/${movie.id}`)
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(403);
+    expect(await countRows('movie')).toBe(1);
+  });
+
   it('supprime le film et répond 204', async () => {
     const movie = await createMovie();
 
