@@ -434,6 +434,64 @@ describe('PUT /movies/:id', () => {
   });
 });
 
+/**
+ * Le garde partagé sur `:id`, vu depuis chaque route qui le consomme. Groupé
+ * ici plutôt que dispersé : c'est un seul comportement, et le dispersant on
+ * perdrait de vue qu'il doit être le même partout.
+ */
+describe('identifiant de film malformé', () => {
+  it('refuse un id non numérique sur la lecture', async () => {
+    const res = await request(app).get('/movies/abc');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid movie id' });
+  });
+
+  /** `parseInt` tronquait : `/movies/1abc` servait le film 1. */
+  it('refuse un id à suffixe non numérique plutôt que de le tronquer', async () => {
+    const movie = await createMovie();
+
+    const res = await request(app).get(`/movies/${movie.id}abc`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un id décimal', async () => {
+    const res = await request(app).get('/movies/1.5');
+
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un id non numérique sur la suppression', async () => {
+    const res = await request(app)
+      .delete('/movies/abc')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un id non numérique sur la mise à jour admin', async () => {
+    const res = await request(app)
+      .put('/movies/abc')
+      .set('Cookie', adminCookie)
+      .send({ englishTitle: 'Peu importe' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un id non numérique sur la demande de modification', async () => {
+    const movie = await createMovie();
+    const token = await createMovieUpdateToken(movie.id);
+
+    const res = await request(app)
+      .patch('/movies/abc')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ originalTitle: 'Peu importe' });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('PATCH /movies/:id', () => {
   it('refuse une requête sans en-tête Authorization', async () => {
     const movie = await createMovie();

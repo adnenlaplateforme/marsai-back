@@ -159,6 +159,19 @@ describe('GET /movies/:id/ratings/me', () => {
     expect(res.body).toMatchObject({ message: 'Rating not found' });
   });
 
+  /**
+   * Répondait 500 : `Number('abc')` donnait NaN, que `db.query` interpolait
+   * dans le SQL. Le garde partagé le rejette désormais en 400.
+   */
+  it('refuse un id de film non numérique', async () => {
+    const res = await request(app)
+      .get('/movies/abc/ratings/me')
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid movie id' });
+  });
+
   it('renvoie la note du juré courant', async () => {
     const { user, cookie } = await createJury('note@test.com');
     const movie = await createMovie();
