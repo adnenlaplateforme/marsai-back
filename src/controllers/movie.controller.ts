@@ -2,8 +2,22 @@ import type { RequestHandler } from 'express';
 import movieService from '../services/movie.service.js';
 import { removeUploads } from '../helpers/remove-uploads.js';
 import AppError from '../helpers/AppError.js';
+import { parseId } from '../helpers/parse-id.js';
 
 import movieUpdateService from '../services/movie-update.service.js';
+
+/**
+ * `search` est facultatif pour le client, mais obligatoire pour le modèle, qui
+ * l'entoure de `%` sans le vérifier. Absent, la concaténation donnait
+ * `'%undefined%'` : la liste sortait vide alors que la base contenait des
+ * films, et le front devait envoyer un `search=` vide pour voir quoi que ce
+ * soit. Une chaîne vide donne `'%%'`, qui laisse tout passer.
+ *
+ * Le type d'Express admet aussi un tableau (`?search=a&search=b`) : la chaîne
+ * vide est plus honnête que la concaténation qu'en ferait le modèle.
+ */
+const parseSearch = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
 
 const create: RequestHandler = async (req, res, next) => {
   try {
@@ -32,7 +46,7 @@ const getAll: RequestHandler = async (req, res, next) => {
     const response = await movieService.getAll(
       pageAsInt,
       type as string,
-      search as string,
+      parseSearch(search),
     );
     return res.send(response);
   } catch (e) {
@@ -42,8 +56,7 @@ const getAll: RequestHandler = async (req, res, next) => {
 
 const remove: RequestHandler = async (req, res, next) => {
   try {
-    const movieId = Number(req.params.id);
-    await movieService.remove(movieId);
+    await movieService.remove(parseId(req.params.id, 'movie'));
 
     return res.status(204).json({ message: 'film delete with success.' });
   } catch (e) {
@@ -53,12 +66,9 @@ const remove: RequestHandler = async (req, res, next) => {
 
 const getById: RequestHandler = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const idAsInt = parseInt(id as string);
-    if (isNaN(idAsInt) || idAsInt <= 0) {
-      throw new AppError(400, 'Wrong query params');
-    }
-    const response = await movieService.getById(idAsInt);
+    const response = await movieService.getById(
+      parseId(req.params.id, 'movie'),
+    );
     return res.send(response);
   } catch (e) {
     next(e);
@@ -76,8 +86,7 @@ const update: RequestHandler = async (req, res, next) => {
 
     const movieId = (await movieUpdateService.getByToken(token))
       .movie_id as number;
-    const { id } = req.params;
-    const idAsInt = parseInt(id as string);
+    const idAsInt = parseId(req.params.id, 'movie');
     if (movieId !== idAsInt) throw new AppError(400, 'Invalid token');
 
     const response = await movieService.update(idAsInt, req.body, token);
@@ -111,7 +120,7 @@ const getAllSorted: RequestHandler = async (req, res, next) => {
       sort as string,
       order as string,
       onlyDraftsAsBool,
-      search as string,
+      parseSearch(search),
     );
     return res.send(response);
   } catch (e) {
@@ -121,10 +130,9 @@ const getAllSorted: RequestHandler = async (req, res, next) => {
 
 const adminUpdate: RequestHandler = async (req, res, next) => {
   try {
-    const { id } = req.params;
     if (!req.body) throw new AppError(400, 'Request body is required');
     const response = await movieService.adminUpdate(
-      parseInt(id as string),
+      parseId(req.params.id, 'movie'),
       req.body,
     );
     return res.status(200).send(response);

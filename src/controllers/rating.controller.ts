@@ -1,11 +1,15 @@
 import type { RequestHandler } from 'express';
 import ratingService from '../services/rating.service.js';
+import { parseId } from '../helpers/parse-id.js';
 
 const rateMovie: RequestHandler = async (req, res, next) => {
   try {
-    const { id } = req.params;
     const userId = req.user_id;
-    await ratingService.rateMovieById(Number(id), userId, req.body);
+    await ratingService.rateMovieById(
+      parseId(req.params.id, 'movie'),
+      userId,
+      req.body,
+    );
     return res.status(201).json({ message: 'Rating submitted successfully' });
   } catch (e) {
     next(e);
@@ -14,8 +18,9 @@ const rateMovie: RequestHandler = async (req, res, next) => {
 
 const getRatings: RequestHandler = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const ratings = await ratingService.getRatingsByMovieId(Number(id));
+    const ratings = await ratingService.getRatingsByMovieId(
+      parseId(req.params.id, 'movie'),
+    );
     return res.status(200).json(ratings);
   } catch (e) {
     next(e);
@@ -24,9 +29,8 @@ const getRatings: RequestHandler = async (req, res, next) => {
 
 const getMyRating: RequestHandler = async (req, res, next) => {
   try {
-    const { id } = req.params;
     const rating = await ratingService.getCurrentJuryRatingByMovieId(
-      Number(id),
+      parseId(req.params.id, 'movie'),
       req.user_id,
     );
     return res.status(200).json(rating);

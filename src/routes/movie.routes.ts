@@ -59,7 +59,7 @@ movieRouter.get(
   ratingController.getMyRating,
 );
 
-movieRouter.delete('/:id', movieController.remove);
+movieRouter.delete('/:id', isLogged, isAdmin, movieController.remove);
 movieRouter.put('/:id', isLogged, isAdmin, movieController.adminUpdate);
 movieRouter.patch(
   '/:id',
