@@ -439,6 +439,19 @@ describe('PUT /movies/:id', () => {
   });
 
   /**
+   * Aucun schéma zod ne garde cette route : `movieModel.update` construit
+   * `${toSnakeCase(clé)} = ?` à partir des clés reçues, si bien qu'un champ
+   * inconnu devient un nom de colonne inexistant et que MySQL répond
+   * `ER_BAD_FIELD_ERROR` — 500, avec le nom issu du corps de la requête.
+   *
+   * Laissé en `todo` plutôt que figé par un test : asserter le 500 en ferait
+   * le contrat de la route. Le corriger demande un `UpdateMovieAdminSchema`
+   * et un arbitrage sur les champs qu'un admin a le droit de modifier, ce qui
+   * mérite sa propre PR.
+   */
+  it.todo('refuse un champ inconnu au lieu de répondre 500');
+
+  /**
    * `pending_change` est le seul statut qui ouvre une demande de modification :
    * il crée le token que le réalisateur recevra par mail et consommera en PATCH.
    */
