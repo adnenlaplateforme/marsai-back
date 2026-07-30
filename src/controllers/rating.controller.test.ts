@@ -133,6 +133,96 @@ describe('GET /movies/ratings/average', () => {
   });
 });
 
+/**
+ * Le détail nominatif des votes : plus sensible que la moyenne, qui au moins
+ * agrège. La route n'avait aucun middleware — elle servait à un visiteur
+ * anonyme la note et le commentaire de chaque juré, en pleine délibération.
+ */
+describe('GET /movies/:id/ratings', () => {
+  it('refuse un visiteur anonyme', async () => {
+    const movie = await createAcceptedMovie();
+
+    const res = await request(app).get(`/movies/${movie.id}/ratings`);
+
+    expect(res.status).toBe(401);
+  });
+
+  // Un juré non plus : voir les notes des autres pendant qu'il pose les siennes
+  // est exactement ce que `/ratings/average` lui interdit déjà.
+  it('refuse un juré', async () => {
+    const movie = await createAcceptedMovie();
+
+    const res = await request(app)
+      .get(`/movies/${movie.id}/ratings`)
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("répond 404 quand le film n'existe pas", async () => {
+    const res = await request(app)
+      .get('/movies/999999/ratings')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ message: 'Movie not found' });
+  });
+
+  it('refuse un id de film non numérique', async () => {
+    const res = await request(app)
+      .get('/movies/abc/ratings')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid movie id' });
+  });
+
+  it("sert à l'admin les notes de tous les jurés", async () => {
+    const first = await createUser({
+      email: 'v1@test.com',
+      roles: [Role.Jury],
+    });
+    const second = await createUser({
+      email: 'v2@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await createAcceptedMovie();
+    await ratingModel.create(first.id, movie.id, 8, 'solide');
+    await ratingModel.create(second.id, movie.id, 5);
+
+    const res = await request(app)
+      .get(`/movies/${movie.id}/ratings`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ user_id: first.id, note: 8 }),
+        expect.objectContaining({ user_id: second.id, note: 5 }),
+      ]),
+    );
+  });
+
+  /**
+   * Aucun filtre de statut ici, contrairement aux listes du jury : l'admin
+   * dépouille, il doit voir les votes posés même si le film a changé de statut
+   * depuis — c'est la même règle que pour le classement.
+   */
+  it('sert les notes quel que soit le statut du film', async () => {
+    const jury = await createUser({ email: 'v3@test.com', roles: [Role.Jury] });
+    const movie = await createMovie({ status: 'rejected' });
+    await ratingModel.create(jury.id, movie.id, 3);
+
+    const res = await request(app)
+      .get(`/movies/${movie.id}/ratings`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
+});
+
 describe('GET /movies/:id/ratings/me', () => {
   it('refuse un visiteur anonyme', async () => {
     const movie = await createMovie();
