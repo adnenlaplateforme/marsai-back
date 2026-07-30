@@ -222,22 +222,49 @@ describe('GET /movies/:id/ratings/me', () => {
 
   /**
    * Le film reste lisible sur `/movies/:id`, qui est public : le refus porte
-   * sur la délibération, pas sur l'existence du film. D'où 403 et non 404.
+   * sur le périmètre du jury, pas sur l'existence du film. D'où 403 et non 404.
    */
-  it("refuse un film que l'admin n'a pas accepté", async () => {
-    const { user, cookie } = await createJury('hors-perimetre@test.com');
-    const movie = await createMovie({ status: 'pending_review' });
-    await ratingModel.create(user.id, movie.id, 6);
+  it.each(['pending_review', 'pending_change', 'rejected'] as const)(
+    'refuse un film au statut %s',
+    async (status) => {
+      const { user, cookie } = await createJury(`hors-${status}@test.com`);
+      const movie = await createMovie({ slug: `film-${status}`, status });
+      await ratingModel.create(user.id, movie.id, 6);
 
-    const res = await request(app)
-      .get(`/movies/${movie.id}/ratings/me`)
-      .set('Cookie', cookie);
+      const res = await request(app)
+        .get(`/movies/${movie.id}/ratings/me`)
+        .set('Cookie', cookie);
 
-    expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({
-      message: 'Movie not open to jury rating',
-    });
-  });
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ message: 'Movie not visible to jury' });
+    },
+  );
+
+  /**
+   * Le pendant du garde de notation : le vote est clos sur ces deux statuts,
+   * mais le juré doit pouvoir relire la note qu'il a posée avant la décision.
+   * C'est ce qui rend la liste « Notés » cliquable de bout en bout.
+   */
+  it.each(['selected', 'winner'] as const)(
+    'sert encore la note du juré sur un film promu en %s',
+    async (status) => {
+      const { user, cookie } = await createJury(`relit-${status}@test.com`);
+      const movie = await createAcceptedMovie({ slug: `film-${status}` });
+      await ratingModel.create(user.id, movie.id, 9, 'inoubliable');
+
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie.id,
+      ]);
+
+      const res = await request(app)
+        .get(`/movies/${movie.id}/ratings/me`)
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ note: 9, comment: 'inoubliable' });
+    },
+  );
 });
 
 describe('POST /movies/:id/ratings', () => {
@@ -284,6 +311,7 @@ describe('POST /movies/:id/ratings', () => {
     'pending_change',
     'rejected',
     'selected',
+    'winner',
   ] as const)('refuse de noter un film au statut %s', async (status) => {
     const { user, cookie } = await createJury(`${status}@test.com`);
     const movie = await createMovie({ slug: `film-${status}`, status });
@@ -359,27 +387,50 @@ describe('GET /movies/rated', () => {
   });
 
   /**
-   * Conséquence assumée du filtre : si l'admin fait sortir un film du statut
-   * `accepted` après la délibération, il quitte la liste des films notés du
-   * juré. La note reste en base et le classement admin la compte toujours.
+   * Les décisions de l'admin ne rétrécissent pas l'historique du juré : un film
+   * qu'il a noté puis que l'admin promeut reste dans sa liste, avec sa note.
+   * Seul le vote se ferme — c'est `POST /movies/:id/ratings` qui le dit.
    */
-  it("retire un film noté que l'admin a fait passer en sélection", async () => {
-    const { user, cookie } = await createJury('selection@test.com');
-    const movie = await createAcceptedMovie();
-    await ratingModel.create(user.id, movie.id, 9);
+  it.each(['selected', 'winner'] as const)(
+    "garde un film noté que l'admin a promu en %s",
+    async (status) => {
+      const { user, cookie } = await createJury(`promu-${status}@test.com`);
+      const movie = await createAcceptedMovie({ slug: `film-${status}` });
+      await ratingModel.create(user.id, movie.id, 9);
 
-    await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
-      'selected',
-      movie.id,
-    ]);
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie.id,
+      ]);
 
-    const res = await request(app).get('/movies/rated').set('Cookie', cookie);
+      const res = await request(app).get('/movies/rated').set('Cookie', cookie);
 
-    expect(res.body).toEqual([]);
-    expect(
-      await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
-    ).toMatchObject({ note: 9 });
-  });
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0]).toMatchObject({ id: movie.id, note: 9, status });
+    },
+  );
+
+  it.each(['pending_change', 'rejected'] as const)(
+    'retire un film noté repassé en %s',
+    async (status) => {
+      const { user, cookie } = await createJury(`sorti-${status}@test.com`);
+      const movie = await createAcceptedMovie({ slug: `film-${status}` });
+      await ratingModel.create(user.id, movie.id, 9);
+
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie.id,
+      ]);
+
+      const res = await request(app).get('/movies/rated').set('Cookie', cookie);
+
+      expect(res.body).toEqual([]);
+      // La note reste en base : c'est la liste qui se ferme, pas la note.
+      expect(
+        await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
+      ).toMatchObject({ note: 9 });
+    },
+  );
 });
 
 describe('GET /movies/to-rate', () => {
@@ -442,8 +493,9 @@ describe('GET /movies/to-rate', () => {
 
   /**
    * Le cœur de la règle vu du juré : sa file de visionnage ne contient que ce
-   * que l'admin a accepté. `selected` et `winner` en sortent aussi — ce sont
-   * des décisions postérieures à la délibération.
+   * que l'admin a accepté. `selected` et `winner` en sortent aussi — le vote y
+   * est clos, un film sur lequel on ne peut plus voter n'a rien à faire dans
+   * une file à noter. Ils restent en revanche dans la liste « Notés ».
    */
   it('ignore les films que l’admin n’a pas acceptés', async () => {
     const { cookie } = await createJury('perimetre@test.com');

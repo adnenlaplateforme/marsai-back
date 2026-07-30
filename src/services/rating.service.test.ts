@@ -19,17 +19,17 @@ vi.mock('../models/rating.model.js', () => ({
 import ratingService from './rating.service.js';
 import movieModel from '../models/movie.model.js';
 import ratingModel from '../models/rating.model.js';
-import { JURY_VISIBLE_STATUS } from '../helpers/jury-visibility.js';
+import { JURY_RATABLE_STATUS } from '../helpers/jury-visibility.js';
 import { MovieStatus } from '../types/enums/movie-status.enum.js';
 
 const ratingRequest = { note: 4, comment: 'super' };
 
 /**
- * Les deux routes du jury refusent tout film qui n'est pas `accepted` : sans
- * statut sur le film mocké, elles s'arrêteraient sur un 403 avant même
- * d'atteindre le modèle de notes.
+ * Les deux routes du jury vérifient le statut du film : sans lui sur le film
+ * mocké, elles s'arrêteraient sur un 403 avant même d'atteindre le modèle de
+ * notes.
  */
-const acceptedMovie = { id: 5, status: JURY_VISIBLE_STATUS };
+const acceptedMovie = { id: 5, status: JURY_RATABLE_STATUS };
 
 describe('ratingService.rateMovieById', () => {
   beforeEach(() => {
@@ -152,17 +152,39 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
     expect(result).toBe(rating);
   });
 
-  // Le même garde que la notation : un juré ne relit pas plus sa note sur un
-  // film hors périmètre qu'il ne peut en poser une.
-  it("refuse un film que l'admin n'a pas accepté", async () => {
-    vi.mocked(movieModel.getById).mockResolvedValue({
-      id: 5,
-      status: MovieStatus.REJECTED,
-    } as never);
+  /**
+   * Un garde plus large que celui de la notation : ces trois statuts-là
+   * ferment le vote, pas la lecture. C'est ce qui permet à un juré de relire
+   * la note qu'il a posée sur un film que l'admin a promu depuis.
+   */
+  it.each([MovieStatus.SELECTED, MovieStatus.WINNER])(
+    'laisse relire la note sur un film au statut %s',
+    async (status) => {
+      const rating = { id: 99, note: 8 };
+      vi.mocked(movieModel.getById).mockResolvedValue({
+        id: 5,
+        status,
+      } as never);
+      vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(
+        rating as never,
+      );
+
+      await expect(
+        ratingService.getCurrentJuryRatingByMovieId(5, 10),
+      ).resolves.toBe(rating);
+    },
+  );
+
+  it.each([
+    MovieStatus.PENDING_REVIEW,
+    MovieStatus.PENDING_CHANGE,
+    MovieStatus.REJECTED,
+  ])('refuse la lecture sur un film au statut %s', async (status) => {
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5, status } as never);
 
     await expect(
       ratingService.getCurrentJuryRatingByMovieId(5, 10),
-    ).rejects.toThrowError(new AppError(403, 'Movie not open to jury rating'));
+    ).rejects.toThrowError(new AppError(403, 'Movie not visible to jury'));
     expect(ratingModel.getByMovieIdAndUserId).not.toHaveBeenCalled();
   });
 });

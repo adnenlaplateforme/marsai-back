@@ -112,10 +112,10 @@ describe('SQL des listes jury', () => {
   });
 
   /**
-   * Le jury ne délibère que sur les films acceptés. Les cinq autres statuts
-   * sont testés un par un plutôt qu'en bloc : `selected` et `winner` sont les
-   * moins évidents — ils viennent *après* l'acceptation, et il serait facile
-   * de les laisser passer en ne filtrant que les refus et les attentes.
+   * La file de visionnage ne propose que des films sur lesquels le vote est
+   * ouvert : le seul statut `accepted`. Les cinq autres sont testés un par un
+   * plutôt qu'en bloc — `selected` et `winner` sont les moins évidents, ils
+   * viennent *après* l'acceptation et restent visibles ailleurs.
    */
   it.each([
     'pending_review',
@@ -124,28 +124,69 @@ describe('SQL des listes jury', () => {
     'selected',
     'winner',
   ] as const)(
-    'exclut les films au statut %s des deux listes',
+    'exclut les films au statut %s de la file à noter',
     async (status) => {
       const jury = await createUser({
         email: `${status}@test.com`,
         roles: [Role.Jury],
       });
-      const hidden = await insertMovie(
-        `film-${status}`,
-        true,
-        'France',
-        status,
-      );
+      await insertMovie(`film-${status}`, true, 'France', status);
 
       expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+    },
+  );
 
-      await ratingModel.create(jury.id, hidden, 8);
+  /**
+   * L'asymétrie volontaire entre les deux listes : une note posée avant que
+   * l'admin ne promeuve le film reste consultable. Sans cela, l'historique du
+   * juré rétrécirait à chaque décision de l'admin.
+   */
+  it.each(['selected', 'winner'] as const)(
+    'garde dans les films notés un film promu en %s',
+    async (status) => {
+      const jury = await createUser({
+        email: `note-${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      const movie = await insertMovie(`film-note-${status}`, true, 'France');
+
+      await ratingModel.create(jury.id, movie, 8, 'un beau film');
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie,
+      ]);
+
+      const ratedList = await ratingModel.findRatedMoviesByUserId(jury.id);
+
+      expect(ratedList.map((m) => m.id)).toEqual([movie]);
+      expect(ratedList[0]!.note).toBe(8);
+      expect(ratedList[0]!.comment).toBe('un beau film');
+      // Le film quitte en revanche la file à noter, où il n'a plus rien à faire.
+      expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+    },
+  );
+
+  it.each(['pending_change', 'rejected'] as const)(
+    'retire des films notés un film repassé en %s',
+    async (status) => {
+      const jury = await createUser({
+        email: `retire-${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      const movie = await insertMovie(`film-retire-${status}`);
+
+      await ratingModel.create(jury.id, movie, 8);
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie,
+      ]);
 
       expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toEqual([]);
-      // La note existe toujours : c'est la liste du juré qui se ferme, pas la
-      // base. Le classement admin, lui, ne filtre aucun statut.
+      // La note reste en base, et le classement admin la compte toujours : ce
+      // sont les listes du juré qui se ferment, pas la délibération.
       const ranking = await ratingModel.findMoviesWithRatingAverage();
-      expect(ranking.map((m) => m.id)).toEqual([hidden]);
+      expect(ranking.map((m) => m.id)).toEqual([movie]);
+      expect(ranking[0]!.votes).toBe(1);
     },
   );
 
