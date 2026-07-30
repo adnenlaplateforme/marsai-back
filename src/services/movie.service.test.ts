@@ -30,7 +30,11 @@ vi.mock('../models/movie_update.model.js', () => ({
   default: { create: vi.fn(), deleteByToken: vi.fn() },
 }));
 vi.mock('./email.service.js', () => ({
-  default: { statusUpdatePendingMail: vi.fn(), statusUpdateMail: vi.fn() },
+  default: {
+    statusUpdatePendingMail: vi.fn(),
+    statusUpdateMail: vi.fn(),
+    movieResubmittedMail: vi.fn(),
+  },
 }));
 
 import movieService from './movie.service.js';
@@ -166,6 +170,45 @@ describe('movieService.update', () => {
     expect(movieModel.getBySlug).not.toHaveBeenCalled();
     expect(imageModel.remove).not.toHaveBeenCalled();
     expect(imageModel.insertMultiple).not.toHaveBeenCalled();
+    expect(movieUpdateModel.deleteByToken).toHaveBeenCalledWith('tok');
+  });
+
+  it('repasse le film en pending_review pour le sortir de pending_change', async () => {
+    vi.mocked(movieModel.update).mockResolvedValue(1);
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 3 } as never);
+
+    await movieService.update(3, { synopsis: 'maj' } as never, 'tok');
+
+    expect(movieModel.update).toHaveBeenCalledWith(3, {
+      synopsis: 'maj',
+      status: 'pending_review',
+    });
+  });
+
+  it("notifie l'admin du retour de correction", async () => {
+    const movie = { id: 3, english_title: 'The Movie' };
+    vi.mocked(movieModel.update).mockResolvedValue(1);
+    vi.mocked(movieModel.getById).mockResolvedValue(movie as never);
+
+    await movieService.update(3, { synopsis: 'maj' } as never, 'tok');
+
+    expect(emailService.movieResubmittedMail).toHaveBeenCalledWith(movie);
+  });
+
+  it("n'échoue pas quand la notification admin part en erreur", async () => {
+    vi.mocked(movieModel.update).mockResolvedValue(1);
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 3 } as never);
+    // `once` : vi.clearAllMocks n'efface pas les implémentations, un rejet
+    // permanent fuirait sur les tests suivants.
+    vi.mocked(emailService.movieResubmittedMail).mockRejectedValueOnce(
+      new Error('smtp down'),
+    );
+
+    // La correction est déjà écrite et le token consommé : le réalisateur ne
+    // doit pas recevoir d'erreur, il n'aurait plus de lien pour réessayer.
+    await expect(
+      movieService.update(3, { synopsis: 'maj' } as never, 'tok'),
+    ).resolves.toBe(1);
     expect(movieUpdateModel.deleteByToken).toHaveBeenCalledWith('tok');
   });
 });

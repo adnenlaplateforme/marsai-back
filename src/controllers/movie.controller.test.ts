@@ -10,6 +10,7 @@ vi.mock('../services/email.service.js', () => ({
   default: {
     statusUpdateMail: vi.fn(),
     statusUpdatePendingMail: vi.fn(),
+    movieResubmittedMail: vi.fn(),
   },
 }));
 
@@ -587,6 +588,25 @@ describe('PATCH /movies/:id', () => {
 
     const after = await request(app).get(`/movies/${movie.id}`);
     expect(after.body.original_title).toBe('Après');
+  });
+
+  /**
+   * Le retour de correction est le seul moment où un film sort de
+   * `pending_change` : le token consommé ne laisse aucune trace, et sans cette
+   * remise en file l'admin verrait le film figé en « correction demandée ».
+   */
+  it('remet le film en pending_review et notifie l’admin', async () => {
+    const movie = await createMovie({ status: 'pending_change' });
+    const token = await createMovieUpdateToken(movie.id);
+
+    await request(app)
+      .patch(`/movies/${movie.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ originalTitle: 'Corrigé' });
+
+    const after = await request(app).get(`/movies/${movie.id}`);
+    expect(after.body.status).toBe('pending_review');
+    expect(emailService.movieResubmittedMail).toHaveBeenCalledOnce();
   });
 
   it('refuse un token déjà consommé', async () => {

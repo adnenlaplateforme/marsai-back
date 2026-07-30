@@ -14,6 +14,7 @@ import AppError from '../helpers/AppError.js';
 import type { MovieFindAllResponse } from '../types/interfaces/MovieFindAllResponse.interface.js';
 import emailService from './email.service.js';
 import movieUpdateModel from '../models/movie_update.model.js';
+import { MovieStatus } from '../types/enums/movie-status.enum.js';
 
 const create = async (movieRequest: MovieRequest): Promise<MovieResponse> => {
   try {
@@ -86,15 +87,29 @@ const update = async (
     });
     rest.slug = slug;
   }
-  const affectedRows = await movieModel.update(
-    id,
-    rest as Partial<MovieRequest>,
-  );
+  // Le film repasse en revue : sans ça il resterait indéfiniment en
+  // `pending_change`, et l'admin ne pourrait pas distinguer une correction
+  // honorée d'une demande restée sans réponse.
+  const affectedRows = await movieModel.update(id, {
+    ...rest,
+    status: MovieStatus.PENDING_REVIEW,
+  } as Partial<MovieRequest>);
   if (stillsUrls && stillsUrls.length > 0) {
     await imageModel.remove(id);
     await imageModel.insertMultiple(stillsUrls, id);
   }
   await movieUpdateModel.deleteByToken(token);
+
+  // Notification après coup, et sans faire échouer la requête : la correction
+  // est déjà écrite et le token consommé. Une erreur SMTP renverrait une 500 au
+  // réalisateur alors qu'il n'a plus de lien pour réessayer.
+  try {
+    const movie = await movieModel.getById(id);
+    if (movie) await emailService.movieResubmittedMail(movie);
+  } catch (e) {
+    console.error(`failed to notify admin about movie ${id} resubmission`, e);
+  }
+
   return affectedRows;
 };
 
