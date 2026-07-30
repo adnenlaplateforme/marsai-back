@@ -20,6 +20,7 @@ import { Role } from '../types/enums/role.enum.js';
 const insertMovie = async (
   slug: string,
   withDirector = true,
+  country = 'France',
 ): Promise<number> => {
   const [res] = await db.execute<ResultSetHeader>(
     `INSERT INTO movie (original_title, english_title, slug, cover_path, duration,
@@ -30,9 +31,9 @@ const insertMovie = async (
   );
   if (withDirector) {
     await db.execute(
-      `INSERT INTO collaborator (firstname, lastname, is_director, movie_id)
-       VALUES ('Jane', 'Realisatrice', true, ?)`,
-      [res.insertId],
+      `INSERT INTO collaborator (firstname, lastname, country, is_director, movie_id)
+       VALUES ('Jane', 'Realisatrice', ?, true, ?)`,
+      [country, res.insertId],
     );
   }
   return res.insertId;
@@ -76,6 +77,32 @@ describe('SQL des listes jury', () => {
     expect(
       (await ratingModel.findMoviesToRateByUserId(jury.id)).map((m) => m.id),
     ).toEqual([movie]);
+  });
+
+  /**
+   * `directorJson` est partagé par les trois requêtes de ce modèle : un champ
+   * oublié disparaît des listes jury *et* du classement admin à la fois. Le
+   * type `Director` promet `country`, la requête doit le livrer.
+   */
+  it('expose le pays du réalisateur dans les trois listes', async () => {
+    const jury = await createUser({
+      email: 'pays@test.com',
+      roles: [Role.Jury],
+    });
+    const rated = await insertMovie('film-note-pays', true, 'Sénégal');
+    await insertMovie('film-a-noter-pays', true, 'Japon');
+
+    await ratingModel.create(jury.id, rated, 7);
+
+    const ratedList = await ratingModel.findRatedMoviesByUserId(jury.id);
+    const toRateList = await ratingModel.findMoviesToRateByUserId(jury.id);
+    const ranking = await ratingModel.findMoviesWithRatingAverage();
+
+    expect(ratedList[0]!.director.country).toBe('Sénégal');
+    expect(toRateList[0]!.director.country).toBe('Japon');
+    expect(
+      ranking.find((m) => m.id === rated)!.director.country,
+    ).toBe('Sénégal');
   });
 
   it('exclut les films sans réalisateur des deux listes', async () => {

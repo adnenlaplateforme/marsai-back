@@ -182,6 +182,7 @@ interface TestCollaborator {
   lastname?: string;
   email?: string;
   contribution?: string;
+  country?: string;
 }
 
 interface CreateMovieOptions {
@@ -253,14 +254,15 @@ export const createMovie = async ({
 
   const [dir] = await db.execute<ResultSetHeader>(
     `INSERT INTO \`collaborator\`
-      (\`firstname\`, \`lastname\`, \`gender\`, \`email\`, \`contribution\`, \`movie_id\`, \`is_director\`)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (\`firstname\`, \`lastname\`, \`gender\`, \`email\`, \`contribution\`, \`country\`, \`movie_id\`, \`is_director\`)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       director.firstname ?? 'Jane',
       director.lastname ?? 'Realisatrice',
       'Mme',
       director.email ?? 'realisatrice@test.com',
       'Director',
+      director.country ?? 'France',
       movieId,
       true,
     ],
