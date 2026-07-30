@@ -15,7 +15,12 @@ import { RandomMovieRequestSchema } from '../types/schemas/random-movie-schema.j
 const movieRouter = express.Router();
 
 movieRouter.get('/', movieController.getAll);
-movieRouter.get('/sort', isLogged, movieController.getAllSorted);
+// La liste de gestion des soumissions : tous les films, tous les statuts, y
+// compris les refusés et ceux encore en attente. `isLogged` seul l'ouvrait au
+// jury, qui ne doit voir que les films acceptés — il a `/to-rate` et `/rated`
+// pour cela. La recherche publique de la galerie passe par `GET /movies`, pas
+// par ici : la fermer ne l'affecte pas.
+movieRouter.get('/sort', isLogged, isAdmin, movieController.getAllSorted);
 movieRouter.get(
   '/random',
   validateParamsAndQuery(RandomMovieRequestSchema),

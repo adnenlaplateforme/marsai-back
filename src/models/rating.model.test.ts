@@ -8,6 +8,7 @@ import db from '../database/connection.js';
 import ratingModel from './rating.model.js';
 import { resetDatabase } from '../helpers/resetDatabase.js';
 import { createUser } from '../helpers/test-factories.js';
+import type { MovieStatusValue } from '../helpers/test-factories.js';
 import { Role } from '../types/enums/role.enum.js';
 
 /**
@@ -16,18 +17,23 @@ import { Role } from '../types/enums/role.enum.js';
  * Volontairement local plutôt que dans test-factories : le cas sans
  * réalisateur est justement ce qu'on veut provoquer ici, alors qu'une factory
  * partagée doit produire des films visibles par l'API.
+ *
+ * Le statut vaut `accepted` par défaut, et non celui de la base
+ * (`pending_review`) : c'est le seul que les listes du jury servent, un défaut
+ * différent rendrait vide la quasi-totalité des cas testés ici.
  */
 const insertMovie = async (
   slug: string,
   withDirector = true,
   country = 'France',
+  status: MovieStatusValue = 'accepted',
 ): Promise<number> => {
   const [res] = await db.execute<ResultSetHeader>(
     `INSERT INTO movie (original_title, english_title, slug, cover_path, duration,
       is_hybrid, language, original_synopsis, english_synopsis, creative_process,
-      ai_tools, has_subs)
-     VALUES (?, ?, ?, 'cover.jpg', 90, false, 'FR', 'syn', 'syn', 'proc', 'tools', false)`,
-    [slug, slug, slug],
+      ai_tools, has_subs, status)
+     VALUES (?, ?, ?, 'cover.jpg', 90, false, 'FR', 'syn', 'syn', 'proc', 'tools', false, ?)`,
+    [slug, slug, slug, status],
   );
   if (withDirector) {
     await db.execute(
@@ -100,10 +106,48 @@ describe('SQL des listes jury', () => {
 
     expect(ratedList[0]!.director.country).toBe('Sénégal');
     expect(toRateList[0]!.director.country).toBe('Japon');
-    expect(
-      ranking.find((m) => m.id === rated)!.director.country,
-    ).toBe('Sénégal');
+    expect(ranking.find((m) => m.id === rated)!.director.country).toBe(
+      'Sénégal',
+    );
   });
+
+  /**
+   * Le jury ne délibère que sur les films acceptés. Les cinq autres statuts
+   * sont testés un par un plutôt qu'en bloc : `selected` et `winner` sont les
+   * moins évidents — ils viennent *après* l'acceptation, et il serait facile
+   * de les laisser passer en ne filtrant que les refus et les attentes.
+   */
+  it.each([
+    'pending_review',
+    'pending_change',
+    'rejected',
+    'selected',
+    'winner',
+  ] as const)(
+    'exclut les films au statut %s des deux listes',
+    async (status) => {
+      const jury = await createUser({
+        email: `${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      const hidden = await insertMovie(
+        `film-${status}`,
+        true,
+        'France',
+        status,
+      );
+
+      expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+
+      await ratingModel.create(jury.id, hidden, 8);
+
+      expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toEqual([]);
+      // La note existe toujours : c'est la liste du juré qui se ferme, pas la
+      // base. Le classement admin, lui, ne filtre aucun statut.
+      const ranking = await ratingModel.findMoviesWithRatingAverage();
+      expect(ranking.map((m) => m.id)).toEqual([hidden]);
+    },
+  );
 
   it('exclut les films sans réalisateur des deux listes', async () => {
     const jury = await createUser({ email: 'c@test.com', roles: [Role.Jury] });

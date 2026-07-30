@@ -19,8 +19,17 @@ vi.mock('../models/rating.model.js', () => ({
 import ratingService from './rating.service.js';
 import movieModel from '../models/movie.model.js';
 import ratingModel from '../models/rating.model.js';
+import { JURY_VISIBLE_STATUS } from '../helpers/jury-visibility.js';
+import { MovieStatus } from '../types/enums/movie-status.enum.js';
 
 const ratingRequest = { note: 4, comment: 'super' };
+
+/**
+ * Les deux routes du jury refusent tout film qui n'est pas `accepted` : sans
+ * statut sur le film mocké, elles s'arrêteraient sur un 403 avant même
+ * d'atteindre le modèle de notes.
+ */
+const acceptedMovie = { id: 5, status: JURY_VISIBLE_STATUS };
 
 describe('ratingService.rateMovieById', () => {
   beforeEach(() => {
@@ -38,7 +47,7 @@ describe('ratingService.rateMovieById', () => {
   });
 
   it('met à jour la note quand une note existe déjà', async () => {
-    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
     vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue({
       id: 99,
     } as never);
@@ -51,12 +60,32 @@ describe('ratingService.rateMovieById', () => {
   });
 
   it("crée une note quand il n'en existe pas encore", async () => {
-    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
     vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(null);
 
     await ratingService.rateMovieById(5, 10, ratingRequest);
 
     expect(ratingModel.create).toHaveBeenCalledWith(10, 5, 4, 'super');
+    expect(ratingModel.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Le film existe mais n'est pas ouvert à la délibération. 403 et non 404 :
+   * `/movies/:id` est public, l'existence du film n'est pas un secret.
+   */
+  it.each([
+    MovieStatus.PENDING_REVIEW,
+    MovieStatus.PENDING_CHANGE,
+    MovieStatus.REJECTED,
+    MovieStatus.SELECTED,
+    MovieStatus.WINNER,
+  ])('refuse de noter un film au statut %s', async (status) => {
+    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5, status } as never);
+
+    await expect(
+      ratingService.rateMovieById(5, 10, ratingRequest),
+    ).rejects.toThrowError(new AppError(403, 'Movie not open to jury rating'));
+    expect(ratingModel.create).not.toHaveBeenCalled();
     expect(ratingModel.update).not.toHaveBeenCalled();
   });
 });
@@ -102,7 +131,7 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
   });
 
   it("lève une AppError 404 quand le juré n'a pas encore noté le film", async () => {
-    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
     vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(null);
 
     await expect(
@@ -112,7 +141,7 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
 
   it('retourne la note du juré courant', async () => {
     const rating = { id: 99, note: 8, comment: 'bien' };
-    vi.mocked(movieModel.getById).mockResolvedValue({ id: 5 } as never);
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
     vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(
       rating as never,
     );
@@ -121,6 +150,20 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
 
     expect(ratingModel.getByMovieIdAndUserId).toHaveBeenCalledWith(10, 5);
     expect(result).toBe(rating);
+  });
+
+  // Le même garde que la notation : un juré ne relit pas plus sa note sur un
+  // film hors périmètre qu'il ne peut en poser une.
+  it("refuse un film que l'admin n'a pas accepté", async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue({
+      id: 5,
+      status: MovieStatus.REJECTED,
+    } as never);
+
+    await expect(
+      ratingService.getCurrentJuryRatingByMovieId(5, 10),
+    ).rejects.toThrowError(new AppError(403, 'Movie not open to jury rating'));
+    expect(ratingModel.getByMovieIdAndUserId).not.toHaveBeenCalled();
   });
 });
 

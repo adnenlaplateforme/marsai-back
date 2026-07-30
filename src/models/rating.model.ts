@@ -1,5 +1,6 @@
 import type { ResultSetHeader } from 'mysql2';
 import db from '../database/connection.js';
+import { JURY_VISIBLE_STATUS } from '../helpers/jury-visibility.js';
 import type Rate from '../types/interfaces/rate.interface.js';
 import type {
   MovieRatingAverage,
@@ -68,6 +69,14 @@ const directorJson =
     "country", c.country\
   ) AS director';
 
+/**
+ * Les films que ce juré a notés.
+ *
+ * Filtré sur `JURY_VISIBLE_STATUS` comme la liste des films à noter : une note
+ * posée avant que l'admin ne change le statut du film reste en base, mais le
+ * film sort de la liste du juré. Il ne disparaît pas du classement admin, qui
+ * n'applique aucun filtre de statut.
+ */
 const findRatedMoviesByUserId = async (
   userId: number,
 ): Promise<MovieWithRating[]> => {
@@ -76,9 +85,13 @@ const findRatedMoviesByUserId = async (
     INNER JOIN movie m ON m.id = r.movie_id \
     INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
     WHERE r.user_id = ? \
+    AND m.status = ? \
     ORDER BY r.updated_at DESC`;
 
-  const [result] = await db.query<MovieWithRating[]>(sql, [userId]);
+  const [result] = await db.query<MovieWithRating[]>(sql, [
+    userId,
+    JURY_VISIBLE_STATUS,
+  ]);
   return result;
 };
 
@@ -87,8 +100,7 @@ const findRatedMoviesByUserId = async (
  *
  * Le `user_id` est dans la condition du LEFT JOIN et non dans le WHERE : placé
  * dans le WHERE, il annulerait le LEFT JOIN et ne renverrait plus jamais rien.
- * Aucun filtre de statut, pour rester aligné sur POST /movies/:id/ratings qui
- * accepte n'importe quel film existant.
+ * Le statut, lui, porte bien sur le film : il va dans le WHERE.
  */
 const findMoviesToRateByUserId = async (
   userId: number,
@@ -98,9 +110,13 @@ const findMoviesToRateByUserId = async (
     INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
     LEFT JOIN rating r ON r.movie_id = m.id AND r.user_id = ? \
     WHERE r.id IS NULL \
+    AND m.status = ? \
     ORDER BY m.submitted_at DESC`;
 
-  const [result] = await db.query<MovieWithDirector[]>(sql, [userId]);
+  const [result] = await db.query<MovieWithDirector[]>(sql, [
+    userId,
+    JURY_VISIBLE_STATUS,
+  ]);
   return result;
 };
 
