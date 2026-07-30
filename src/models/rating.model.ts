@@ -64,7 +64,8 @@ const directorJson =
   'JSON_OBJECT( \
     "gender", c.gender,\
     "firstname", c.firstname,\
-    "lastname", c.lastname\
+    "lastname", c.lastname,\
+    "country", c.country\
   ) AS director';
 
 const findRatedMoviesByUserId = async (
