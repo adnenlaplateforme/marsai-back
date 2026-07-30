@@ -1,5 +1,9 @@
 import type { ResultSetHeader } from 'mysql2';
 import db from '../database/connection.js';
+import {
+  JURY_RATABLE_STATUS,
+  JURY_VISIBLE_STATUSES,
+} from '../helpers/jury-visibility.js';
 import type Rate from '../types/interfaces/rate.interface.js';
 import type {
   MovieRatingAverage,
@@ -68,6 +72,18 @@ const directorJson =
     "country", c.country\
   ) AS director';
 
+/**
+ * Les films que ce juré a notés.
+ *
+ * Filtré sur les statuts *visibles* et non sur le seul statut notable : un film
+ * que l'admin promeut en `selected` ou `winner` après le vote doit rester ici,
+ * avec sa note, sinon l'historique du juré rétrécit à chaque décision de
+ * l'admin. `pending_change` et `rejected` sortent bien de la liste, eux.
+ *
+ * `IN (?)` avec un tableau : mysql2 le développe en liste échappée — mais
+ * seulement via `query`, jamais via `execute`, qui prépare la requête et
+ * compterait un unique paramètre.
+ */
 const findRatedMoviesByUserId = async (
   userId: number,
 ): Promise<MovieWithRating[]> => {
@@ -76,9 +92,13 @@ const findRatedMoviesByUserId = async (
     INNER JOIN movie m ON m.id = r.movie_id \
     INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
     WHERE r.user_id = ? \
+    AND m.status IN (?) \
     ORDER BY r.updated_at DESC`;
 
-  const [result] = await db.query<MovieWithRating[]>(sql, [userId]);
+  const [result] = await db.query<MovieWithRating[]>(sql, [
+    userId,
+    JURY_VISIBLE_STATUSES,
+  ]);
   return result;
 };
 
@@ -87,8 +107,12 @@ const findRatedMoviesByUserId = async (
  *
  * Le `user_id` est dans la condition du LEFT JOIN et non dans le WHERE : placé
  * dans le WHERE, il annulerait le LEFT JOIN et ne renverrait plus jamais rien.
- * Aucun filtre de statut, pour rester aligné sur POST /movies/:id/ratings qui
- * accepte n'importe quel film existant.
+ * Le statut, lui, porte bien sur le film : il va dans le WHERE.
+ *
+ * Le statut notable, et non les statuts visibles : une file de visionnage ne
+ * doit proposer que des films sur lesquels le vote est encore ouvert. Un
+ * `selected` jamais noté n'y a pas sa place — il mènerait à un formulaire que
+ * `POST /movies/:id/ratings` refuse.
  */
 const findMoviesToRateByUserId = async (
   userId: number,
@@ -98,9 +122,13 @@ const findMoviesToRateByUserId = async (
     INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
     LEFT JOIN rating r ON r.movie_id = m.id AND r.user_id = ? \
     WHERE r.id IS NULL \
+    AND m.status = ? \
     ORDER BY m.submitted_at DESC`;
 
-  const [result] = await db.query<MovieWithDirector[]>(sql, [userId]);
+  const [result] = await db.query<MovieWithDirector[]>(sql, [
+    userId,
+    JURY_RATABLE_STATUS,
+  ]);
   return result;
 };
 

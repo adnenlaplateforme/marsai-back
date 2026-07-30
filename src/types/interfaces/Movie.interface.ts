@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2';
 import type { Languages } from '../enums/languages.enum.js';
+import type { MovieStatus } from '../enums/movie-status.enum.js';
 import type { Collaborator, Director } from '../schemas/MovieRequest.schema.js';
 
 export default interface Movie extends RowDataPacket {
@@ -19,7 +20,9 @@ export default interface Movie extends RowDataPacket {
   ia_tools: string;
   has_subs: boolean;
   srt: string | null;
-  status: 'draft' | 'published' | 'archived';
+  // Les valeurs de l'ENUM `movie.status` en base. Déclarait auparavant
+  // 'draft' | 'published' | 'archived', qui n'existent dans aucune des deux.
+  status: MovieStatus;
   collaborators: Collaborator[];
 }
 

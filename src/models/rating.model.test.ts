@@ -8,6 +8,7 @@ import db from '../database/connection.js';
 import ratingModel from './rating.model.js';
 import { resetDatabase } from '../helpers/resetDatabase.js';
 import { createUser } from '../helpers/test-factories.js';
+import type { MovieStatusValue } from '../helpers/test-factories.js';
 import { Role } from '../types/enums/role.enum.js';
 
 /**
@@ -16,18 +17,23 @@ import { Role } from '../types/enums/role.enum.js';
  * Volontairement local plutôt que dans test-factories : le cas sans
  * réalisateur est justement ce qu'on veut provoquer ici, alors qu'une factory
  * partagée doit produire des films visibles par l'API.
+ *
+ * Le statut vaut `accepted` par défaut, et non celui de la base
+ * (`pending_review`) : c'est le seul que les listes du jury servent, un défaut
+ * différent rendrait vide la quasi-totalité des cas testés ici.
  */
 const insertMovie = async (
   slug: string,
   withDirector = true,
   country = 'France',
+  status: MovieStatusValue = 'accepted',
 ): Promise<number> => {
   const [res] = await db.execute<ResultSetHeader>(
     `INSERT INTO movie (original_title, english_title, slug, cover_path, duration,
       is_hybrid, language, original_synopsis, english_synopsis, creative_process,
-      ai_tools, has_subs)
-     VALUES (?, ?, ?, 'cover.jpg', 90, false, 'FR', 'syn', 'syn', 'proc', 'tools', false)`,
-    [slug, slug, slug],
+      ai_tools, has_subs, status)
+     VALUES (?, ?, ?, 'cover.jpg', 90, false, 'FR', 'syn', 'syn', 'proc', 'tools', false, ?)`,
+    [slug, slug, slug, status],
   );
   if (withDirector) {
     await db.execute(
@@ -100,10 +106,89 @@ describe('SQL des listes jury', () => {
 
     expect(ratedList[0]!.director.country).toBe('Sénégal');
     expect(toRateList[0]!.director.country).toBe('Japon');
-    expect(
-      ranking.find((m) => m.id === rated)!.director.country,
-    ).toBe('Sénégal');
+    expect(ranking.find((m) => m.id === rated)!.director.country).toBe(
+      'Sénégal',
+    );
   });
+
+  /**
+   * La file de visionnage ne propose que des films sur lesquels le vote est
+   * ouvert : le seul statut `accepted`. Les cinq autres sont testés un par un
+   * plutôt qu'en bloc — `selected` et `winner` sont les moins évidents, ils
+   * viennent *après* l'acceptation et restent visibles ailleurs.
+   */
+  it.each([
+    'pending_review',
+    'pending_change',
+    'rejected',
+    'selected',
+    'winner',
+  ] as const)(
+    'exclut les films au statut %s de la file à noter',
+    async (status) => {
+      const jury = await createUser({
+        email: `${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      await insertMovie(`film-${status}`, true, 'France', status);
+
+      expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+    },
+  );
+
+  /**
+   * L'asymétrie volontaire entre les deux listes : une note posée avant que
+   * l'admin ne promeuve le film reste consultable. Sans cela, l'historique du
+   * juré rétrécirait à chaque décision de l'admin.
+   */
+  it.each(['selected', 'winner'] as const)(
+    'garde dans les films notés un film promu en %s',
+    async (status) => {
+      const jury = await createUser({
+        email: `note-${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      const movie = await insertMovie(`film-note-${status}`, true, 'France');
+
+      await ratingModel.create(jury.id, movie, 8, 'un beau film');
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie,
+      ]);
+
+      const ratedList = await ratingModel.findRatedMoviesByUserId(jury.id);
+
+      expect(ratedList.map((m) => m.id)).toEqual([movie]);
+      expect(ratedList[0]!.note).toBe(8);
+      expect(ratedList[0]!.comment).toBe('un beau film');
+      // Le film quitte en revanche la file à noter, où il n'a plus rien à faire.
+      expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+    },
+  );
+
+  it.each(['pending_change', 'rejected'] as const)(
+    'retire des films notés un film repassé en %s',
+    async (status) => {
+      const jury = await createUser({
+        email: `retire-${status}@test.com`,
+        roles: [Role.Jury],
+      });
+      const movie = await insertMovie(`film-retire-${status}`);
+
+      await ratingModel.create(jury.id, movie, 8);
+      await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
+        status,
+        movie,
+      ]);
+
+      expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toEqual([]);
+      // La note reste en base, et le classement admin la compte toujours : ce
+      // sont les listes du juré qui se ferment, pas la délibération.
+      const ranking = await ratingModel.findMoviesWithRatingAverage();
+      expect(ranking.map((m) => m.id)).toEqual([movie]);
+      expect(ranking[0]!.votes).toBe(1);
+    },
+  );
 
   it('exclut les films sans réalisateur des deux listes', async () => {
     const jury = await createUser({ email: 'c@test.com', roles: [Role.Jury] });

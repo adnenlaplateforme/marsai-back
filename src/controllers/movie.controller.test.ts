@@ -155,6 +155,19 @@ describe('GET /movies/sort', () => {
     expect(res.status).toBe(401);
   });
 
+  /**
+   * La liste de gestion mélange tous les statuts : refusés, en attente,
+   * corrections demandées. Le jury ne délibère que sur les films acceptés, et
+   * dispose de /movies/to-rate et /movies/rated pour les lire.
+   */
+  it('refuse un juré : cette liste expose tous les statuts', async () => {
+    const res = await request(app)
+      .get('/movies/sort?page=1&sort=id&order=ASC&onlyDrafts=false&search=')
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(403);
+  });
+
   it('trie sur le titre anglais en ordre croissant', async () => {
     await createMovie({ slug: 'b', englishTitle: 'Beta' });
     await createMovie({ slug: 'a', englishTitle: 'Alpha' });
