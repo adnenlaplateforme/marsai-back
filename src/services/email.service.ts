@@ -197,6 +197,36 @@ const statusUpdateMail = async (
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
 };
 
+/**
+ * Prévient l'admin qu'un réalisateur a répondu à une demande de modification.
+ *
+ * Seul e-mail de ce fichier qui ne part pas vers un réalisateur : le retour de
+ * correction n'a aucune autre trace côté admin, `movieUpdateModel.deleteByToken`
+ * effaçant la demande une fois honorée.
+ */
+const movieResubmittedMail = async (
+  movie: MovieWithDirector,
+): Promise<void> => {
+  const htmlTemplate = await loadHtmlFile('movie-resubmitted');
+  const personalizedHtml = htmlTemplate
+    .replace('{{DIRECTOR_FIRSTNAME}}', movie.director.firstname)
+    .replace('{{DIRECTOR_LASTNAME}}', movie.director.lastname)
+    .replace('{{MOVIE_ENGLISH_TITLE}}', movie.english_title)
+    .replace(
+      '{{ADMIN_MOVIE_URL}}',
+      `${process.env.FRONT_IP}/admin/movies/${movie.id}-${movie.slug}`,
+    );
+  await transporter.sendMail({
+    from: `MarsAi <${process.env.MAILER_EMAIL}>`,
+    to: process.env.ADMIN_EMAIL,
+    subject: `Updated movie submission to review: ${movie.english_title}`,
+    html: personalizedHtml,
+  });
+  console.info(
+    `sent email to ${process.env.ADMIN_EMAIL} about movie ${movie.id}`,
+  );
+};
+
 const emailService = {
   sendMail,
   mailerJob,
@@ -204,6 +234,7 @@ const emailService = {
   statusUpdateMail,
   sendJuryInvites,
   statusUpdatePendingMail,
+  movieResubmittedMail,
 };
 
 export default emailService;
