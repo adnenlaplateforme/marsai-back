@@ -153,7 +153,13 @@ CREATE TABLE IF NOT EXISTS `rating` (
     `movie_id` INT NOT NULL,
     FOREIGN KEY (`movie_id`) REFERENCES `movie`(`id`) ON DELETE CASCADE,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    -- Un juré ne pose qu'une note par film : le service écrase la note existante
+    -- plutôt que d'en créer une seconde, mais il le fait en deux requêtes
+    -- séparées (SELECT puis INSERT). Sans cette contrainte, deux requêtes
+    -- concurrentes du même juré peuvent insérer deux lignes, qui fausseraient
+    -- AVG(note) et le nombre de votes du classement.
+    UNIQUE KEY `uniq_rating_jury_film` (`user_id`, `movie_id`)
 );
 
 CREATE TABLE IF NOT EXISTS `jury_invite` (
