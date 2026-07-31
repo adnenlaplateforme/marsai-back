@@ -281,3 +281,61 @@ describe('SQL du classement par moyenne', () => {
     expect(typeof result!.votes).toBe('number');
   });
 });
+
+/**
+ * « Un juré ne pose qu'une note par film » est une règle que le service applique
+ * en deux temps — `getByMovieIdAndUserId` puis `create` ou `update` — avec un
+ * `await` entre les deux. Deux requêtes concurrentes du même juré peuvent donc
+ * lire toutes les deux « aucune note » et insérer toutes les deux.
+ *
+ * La règle doit tenir en base, sans quoi le doublon fausserait `AVG(r.note)` et
+ * `votes` du classement, qui comptent des lignes.
+ */
+describe('unicité (user_id, movie_id) de rating', () => {
+  it('refuse une seconde note du même juré sur le même film', async () => {
+    const jury = await createUser({
+      email: 'unicite@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await insertMovie('film-unicite');
+
+    await ratingModel.create(jury.id, movie, 7, 'première note');
+
+    await expect(
+      ratingModel.create(jury.id, movie, 9, 'doublon'),
+    ).rejects.toThrow();
+
+    const notes = await ratingModel.findAllByMovieId(movie);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.note).toBe(7);
+  });
+
+  it('laisse deux jurés différents noter le même film', async () => {
+    const premier = await createUser({
+      email: 'unicite-a@test.com',
+      roles: [Role.Jury],
+    });
+    const second = await createUser({
+      email: 'unicite-b@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await insertMovie('film-deux-jures');
+
+    await ratingModel.create(premier.id, movie, 7);
+    await ratingModel.create(second.id, movie, 9);
+
+    expect(await ratingModel.findAllByMovieId(movie)).toHaveLength(2);
+  });
+
+  it('laisse un juré noter deux films différents', async () => {
+    const jury = await createUser({
+      email: 'unicite-c@test.com',
+      roles: [Role.Jury],
+    });
+
+    await ratingModel.create(jury.id, await insertMovie('film-un'), 7);
+    await ratingModel.create(jury.id, await insertMovie('film-deux'), 9);
+
+    expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toHaveLength(2);
+  });
+});

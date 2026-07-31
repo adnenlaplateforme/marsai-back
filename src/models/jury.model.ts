@@ -1,5 +1,6 @@
 import type { ResultSetHeader } from 'mysql2';
 import db from '../database/connection.js';
+import type JuryProgress from '../types/interfaces/jury-progress.interface.js';
 import type Jury from '../types/interfaces/jury.interface.js';
 
 const create = async (
@@ -29,6 +30,33 @@ const findAll = async (): Promise<Jury[]> => {
   return juries;
 };
 
+/**
+ * Le nombre de films notés par chaque juré, et sa dernière activité.
+ *
+ * `MAX(r.updated_at)` et non `created_at` : réviser une note est une activité.
+ * Il vaut NULL tant que le juré n'a rien noté, pendant exact de `rated = 0`.
+ *
+ * LEFT JOIN sur `rating` et non INNER : un juré qui n'a rien noté doit rester
+ * dans la liste avec `rated = 0`. C'est précisément celui que l'admin cherche —
+ * un INNER JOIN le ferait disparaître du tableau de bord.
+ *
+ * Trié sur `u.id`, comme l'est de fait `findAll` : les deux listes arrivent
+ * dans le même ordre côté admin.
+ */
+const findProgress = async (): Promise<JuryProgress[]> => {
+  const sql = `SELECT u.id, u.email, u.firstname, u.lastname, \
+    COUNT(r.id) AS rated, \
+    MAX(r.updated_at) AS last_rated_at \
+    FROM user u \
+    JOIN role_user ru ON ru.user_id = u.id AND ru.role_id = 2 \
+    LEFT JOIN rating r ON r.user_id = u.id \
+    GROUP BY u.id \
+    ORDER BY u.id`;
+
+  const [progress] = await db.query<JuryProgress[]>(sql);
+  return progress;
+};
+
 const findById = async (juryId: number): Promise<Jury | null> => {
   const sql =
     'SELECT u.id, u.email, u.firstname, u.lastname FROM user u JOIN role_user ru ON ru.user_id = u.id WHERE ru.role_id = 2 AND id = ?';
@@ -47,5 +75,5 @@ const findInEmails = async (juries: { email: string }[]): Promise<Jury[]> => {
   return res as Jury[];
 };
 
-const juryModel = { create, findAll, findById, findInEmails };
+const juryModel = { create, findAll, findProgress, findById, findInEmails };
 export default juryModel;

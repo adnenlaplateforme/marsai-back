@@ -19,6 +19,15 @@ const findAll: RequestHandler = async (_req, res, next) => {
   }
 };
 
-const juryController = { findAll, create };
+const findProgress: RequestHandler = async (_req, res, next) => {
+  try {
+    const progress = await juryService.findProgress();
+    res.send(progress);
+  } catch (e) {
+    next(e);
+  }
+};
+
+const juryController = { findAll, findProgress, create };
 
 export default juryController;
