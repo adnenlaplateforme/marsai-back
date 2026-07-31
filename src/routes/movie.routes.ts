@@ -55,7 +55,11 @@ movieRouter.post(
   ratingController.rateMovie,
 );
 
-movieRouter.get('/:id/ratings', ratingController.getRatings);
+// Les notes individuelles posées sur un film : la note, le commentaire et
+// l'`user_id` de chaque juré. Même sensibilité que `/ratings/average`, en plus
+// détaillé — la moyenne agrège, celle-ci nomme. N'avait aucun middleware : elle
+// s'ouvrait à un visiteur anonyme en pleine délibération.
+movieRouter.get('/:id/ratings', isLogged, isAdmin, ratingController.getRatings);
 
 movieRouter.get(
   '/:id/ratings/me',
