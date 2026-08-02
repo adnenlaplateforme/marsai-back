@@ -9,6 +9,7 @@ import subscriberRouter from './routes/subscriber.route.js';
 import cookieParser from 'cookie-parser';
 import bookingRouter from './routes/booking.routes.js';
 import juryRouter from './routes/jury.routes.js';
+import juryAssignmentRouter from './routes/jury-assignment.routes.js';
 import juryInviteRouter from './routes/jury-invite.route.js';
 import movieUpdateRouter from './routes/movie-update.routes.js';
 
@@ -31,6 +32,7 @@ app.use('/newsletters', newsletterRouter);
 app.use('/subscribers', subscriberRouter);
 app.use('/bookings', bookingRouter);
 app.use('/juries', juryRouter);
+app.use('/jury-assignments', juryAssignmentRouter);
 app.use('/jury-invites', juryInviteRouter);
 app.use('/movie-update', movieUpdateRouter);
 
