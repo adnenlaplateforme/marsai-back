@@ -162,6 +162,26 @@ CREATE TABLE IF NOT EXISTS `rating` (
     UNIQUE KEY `uniq_rating_jury_film` (`user_id`, `movie_id`)
 );
 
+-- Le lot de films confié à un juré. L'admin lance l'attribution une fois, après
+-- la clôture des soumissions ; les jurés ne notent que les films de leur lot.
+--
+-- Table distincte de `rating` à dessein : remettre l'attribution à zéro ne doit
+-- jamais effacer une note. Les deux ne se rencontrent qu'en lecture, pour
+-- compter ce qu'il reste à noter à chaque juré.
+CREATE TABLE IF NOT EXISTS `jury_assignment` (
+    `id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+    `user_id` INT NOT NULL,
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON DELETE CASCADE,
+    `movie_id` INT NOT NULL,
+    FOREIGN KEY (`movie_id`) REFERENCES `movie`(`id`) ON DELETE CASCADE,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    -- Un film n'est confié qu'une fois à un même juré : l'attribution manuelle
+    -- comme le rattrapage d'un traînard passent par un INSERT, et rien
+    -- n'empêcherait autrement de doubler une ligne. Le doublon fausserait le
+    -- compte de films attribués affiché à l'admin.
+    UNIQUE KEY `uniq_jury_assignment` (`user_id`, `movie_id`)
+);
+
 CREATE TABLE IF NOT EXISTS `jury_invite` (
     `email` VARCHAR(255) PRIMARY KEY NOT NULL,
     `token` VARCHAR(255) NOT NULL
