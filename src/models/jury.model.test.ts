@@ -99,3 +99,38 @@ describe('juryModel.findProgress', () => {
     expect(sansNote!.last_rated_at).toBeNull();
   });
 });
+
+/**
+ * `findById` n'avait aucun appelant jusqu'au service d'attribution : la requête
+ * n'avait donc jamais été exécutée. Elle échouait sur `AND id = ?`, ambigu
+ * entre `user` et `role_user`, qui portent tous deux une colonne `id`.
+ */
+describe('juryModel.findById', () => {
+  it('trouve un juré par son identifiant', async () => {
+    const jure = await createUser({
+      email: 'jure@test.com',
+      roles: [Role.Jury],
+    });
+
+    const trouve = await juryModel.findById(jure.id);
+
+    expect(trouve).toMatchObject({ id: jure.id, email: 'jure@test.com' });
+  });
+
+  /**
+   * Le filtre sur le rôle est la raison d'être de la méthode : le service
+   * d'attribution s'en sert pour refuser qu'on confie des films à un admin.
+   */
+  it("ne trouve pas un utilisateur qui n'est pas juré", async () => {
+    const admin = await createUser({
+      email: 'admin@test.com',
+      roles: [Role.Admin],
+    });
+
+    expect(await juryModel.findById(admin.id)).toBeNull();
+  });
+
+  it('renvoie null sur un identifiant inconnu', async () => {
+    expect(await juryModel.findById(999999)).toBeNull();
+  });
+});

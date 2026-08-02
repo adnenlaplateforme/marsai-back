@@ -57,9 +57,14 @@ const findProgress = async (): Promise<JuryProgress[]> => {
   return progress;
 };
 
+/**
+ * `u.id` et non `id` : `role_user` porte elle aussi une colonne `id`, et MySQL
+ * refusait la requête entière (ER_NON_UNIQ_ERROR). Le défaut est resté invisible
+ * tant que la méthode n'avait aucun appelant.
+ */
 const findById = async (juryId: number): Promise<Jury | null> => {
   const sql =
-    'SELECT u.id, u.email, u.firstname, u.lastname FROM user u JOIN role_user ru ON ru.user_id = u.id WHERE ru.role_id = 2 AND id = ?';
+    'SELECT u.id, u.email, u.firstname, u.lastname FROM user u JOIN role_user ru ON ru.user_id = u.id WHERE ru.role_id = 2 AND u.id = ?';
   const [result] = await db.query<Jury[]>(sql, [juryId]);
   return result[0] ?? null;
 };
