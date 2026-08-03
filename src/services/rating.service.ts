@@ -1,5 +1,6 @@
 import movieModel from '../models/movie.model.js';
 import ratingModel from '../models/rating.model.js';
+import juryAssignmentModel from '../models/jury-assignment.model.js';
 import AppError from '../helpers/AppError.js';
 import {
   JURY_RATABLE_STATUS,
@@ -63,12 +64,31 @@ const getMovieVisibleToJury = async (
   return movie;
 };
 
+/**
+ * Poser ou corriger une note, dans les limites du lot du juré.
+ *
+ * Les deux gardes se lisent dans cet ordre, et il est voulu : le statut porte
+ * sur le film, le lot sur la relation entre ce juré et ce film. Sur un film
+ * refusé *et* non attribué, « le vote est clos » est la raison la plus
+ * fondamentale, et c'est celle que le juré doit lire.
+ *
+ * L'attribution est vérifiée avant de regarder s'il existe déjà une note, et
+ * non après : une note posée hors lot — avant le déploiement du filtre, ou
+ * avant que l'admin ne retire le film du lot — devient figée plutôt que
+ * rouvrable. Le lot commande ce qu'un juré peut noter, pas ce qu'il peut
+ * relire : `/movies/:id/ratings/me` et `/movies/rated` la lui montrent
+ * toujours.
+ */
 const rateMovieById = async (
   id: number,
   userId: number,
   ratingRequest: RatingRequest,
 ): Promise<void> => {
   const movie = await getMovieRatableByJury(id);
+
+  if (!(await juryAssignmentModel.isAssigned(userId, movie.id!))) {
+    throw new AppError(403, 'Movie not assigned to you');
+  }
 
   const existingRating = await ratingModel.getByMovieIdAndUserId(
     userId,

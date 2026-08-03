@@ -103,7 +103,7 @@ const findRatedMoviesByUserId = async (
 };
 
 /**
- * Les films que ce juré n'a pas encore notés.
+ * Les films que ce juré n'a pas encore notés, dans les limites de son lot.
  *
  * Le `user_id` est dans la condition du LEFT JOIN et non dans le WHERE : placé
  * dans le WHERE, il annulerait le LEFT JOIN et ne renverrait plus jamais rien.
@@ -113,6 +113,20 @@ const findRatedMoviesByUserId = async (
  * doit proposer que des films sur lesquels le vote est encore ouvert. Un
  * `selected` jamais noté n'y a pas sa place — il mènerait à un formulaire que
  * `POST /movies/:id/ratings` refuse.
+ *
+ * L'INNER JOIN sur `jury_assignment` est le filtre du lot, et il est strict :
+ * un juré sans attribution voit une file vide, jamais l'intégralité du
+ * catalogue. Un repli « aucune ligne pour ce juré → tous les films acceptés »
+ * ne saurait pas distinguer « l'attribution n'a pas encore eu lieu » de « ce
+ * juré, invité après coup, n'a rien reçu » : le second se mettrait à noter hors
+ * lot, et `findProgress`, qui joint `rating` sur le couple attribué, ne
+ * compterait rien de son travail.
+ *
+ * Il ne peut pas dupliquer de ligne : `jury_assignment` porte UNIQUE
+ * (user_id, movie_id), il y a donc au plus une attribution par couple.
+ *
+ * Il ne remplace pas l'anti-jointure sur `rating` : les lignes d'attribution ne
+ * sont pas retirées à la notation, c'est bien `r.id IS NULL` qui érode la file.
  */
 const findMoviesToRateByUserId = async (
   userId: number,
@@ -120,12 +134,14 @@ const findMoviesToRateByUserId = async (
   const sql = `SELECT m.*, ${directorJson} \
     FROM movie m \
     INNER JOIN collaborator c ON c.movie_id = m.id AND c.is_director = true \
+    INNER JOIN jury_assignment ja ON ja.movie_id = m.id AND ja.user_id = ? \
     LEFT JOIN rating r ON r.movie_id = m.id AND r.user_id = ? \
     WHERE r.id IS NULL \
     AND m.status = ? \
     ORDER BY m.submitted_at DESC`;
 
   const [result] = await db.query<MovieWithDirector[]>(sql, [
+    userId,
     userId,
     JURY_RATABLE_STATUS,
   ]);

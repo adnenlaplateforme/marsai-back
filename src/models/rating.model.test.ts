@@ -45,8 +45,93 @@ const insertMovie = async (
   return res.insertId;
 };
 
+/** Confie un film à un juré — le lot, sans passer par l'algorithme d'attribution. */
+const assign = async (userId: number, movieId: number): Promise<void> => {
+  await db.execute(
+    'INSERT INTO jury_assignment (user_id, movie_id) VALUES (?, ?)',
+    [userId, movieId],
+  );
+};
+
 beforeEach(async () => {
   await resetDatabase();
+});
+
+/**
+ * La file à noter est bornée par le lot du juré, et par lui seul.
+ *
+ * Le choix retenu est le filtre strict : pas de lot, pas de film. Un repli
+ * « aucune ligne d'attribution → tous les films acceptés » aurait aussi rattrapé
+ * un juré invité *après* l'attribution, à qui personne n'a rien confié — il
+ * aurait noté hors lot sans que `findProgress`, qui joint sur le couple attribué,
+ * ne compte quoi que ce soit. Un lot vide est une file vide, y compris avant le
+ * tout premier clic sur Attribuer.
+ */
+describe('filtre du lot dans la file à noter', () => {
+  it('ne propose que les films du lot du juré', async () => {
+    const jury = await createUser({
+      email: 'lot@test.com',
+      roles: [Role.Jury],
+    });
+    const dansLeLot = await insertMovie('film-du-lot');
+    await insertMovie('film-hors-lot');
+
+    await assign(jury.id, dansLeLot);
+
+    const toRateList = await ratingModel.findMoviesToRateByUserId(jury.id);
+
+    expect(toRateList.map((m) => m.id)).toEqual([dansLeLot]);
+  });
+
+  it('laisse la file vide quand rien ne lui a été attribué', async () => {
+    const jury = await createUser({
+      email: 'sans-lot@test.com',
+      roles: [Role.Jury],
+    });
+    await insertMovie('film-accepte');
+
+    expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+  });
+
+  it('ne propose pas le film confié à un autre juré', async () => {
+    const jury = await createUser({
+      email: 'lot-a@test.com',
+      roles: [Role.Jury],
+    });
+    const other = await createUser({
+      email: 'lot-b@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await insertMovie('film-de-lautre');
+
+    await assign(other.id, movie);
+
+    expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+  });
+
+  /**
+   * Les lignes d'attribution ne sont jamais retirées à la notation — c'est ce
+   * qui rend `assigned` lisible directement. La file, elle, doit bien s'éroder :
+   * c'est l'anti-jointure sur `rating` qui s'en charge, pas le lot.
+   */
+  it('retire de la file un film du lot que le juré vient de noter', async () => {
+    const jury = await createUser({
+      email: 'lot-note@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await insertMovie('film-du-lot-note');
+
+    await assign(jury.id, movie);
+    await ratingModel.create(jury.id, movie, 8);
+
+    expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
+    // La ligne d'attribution, elle, survit à la notation.
+    const [rows] = await db.query(
+      'SELECT id FROM jury_assignment WHERE user_id = ? AND movie_id = ?',
+      [jury.id, movie],
+    );
+    expect(rows).toHaveLength(1);
+  });
 });
 
 describe('SQL des listes jury', () => {
@@ -58,6 +143,8 @@ describe('SQL des listes jury', () => {
     const rated = await insertMovie('film-note');
     const toRate = await insertMovie('film-a-noter');
 
+    await assign(jury.id, rated);
+    await assign(jury.id, toRate);
     await ratingModel.create(jury.id, rated, 7, 'pas mal');
 
     const ratedList = await ratingModel.findRatedMoviesByUserId(jury.id);
@@ -77,6 +164,10 @@ describe('SQL des listes jury', () => {
     const other = await createUser({ email: 'b@test.com', roles: [Role.Jury] });
     const movie = await insertMovie('film-partage');
 
+    // Le film est dans les deux lots : c'est la note de l'autre, pas son lot,
+    // qui ne doit pas déborder.
+    await assign(jury.id, movie);
+    await assign(other.id, movie);
     await ratingModel.create(other.id, movie, 3);
 
     expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toEqual([]);
@@ -96,8 +187,10 @@ describe('SQL des listes jury', () => {
       roles: [Role.Jury],
     });
     const rated = await insertMovie('film-note-pays', true, 'Sénégal');
-    await insertMovie('film-a-noter-pays', true, 'Japon');
+    const toRate = await insertMovie('film-a-noter-pays', true, 'Japon');
 
+    await assign(jury.id, rated);
+    await assign(jury.id, toRate);
     await ratingModel.create(jury.id, rated, 7);
 
     const ratedList = await ratingModel.findRatedMoviesByUserId(jury.id);
@@ -130,7 +223,11 @@ describe('SQL des listes jury', () => {
         email: `${status}@test.com`,
         roles: [Role.Jury],
       });
-      await insertMovie(`film-${status}`, true, 'France', status);
+      const movie = await insertMovie(`film-${status}`, true, 'France', status);
+      // Le film est bien dans le lot : c'est son statut qui l'écarte, et lui
+      // seul. Sans cette ligne, le filtre du lot suffirait à vider la file et
+      // le test passerait sans rien prouver.
+      await assign(jury.id, movie);
 
       expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
     },
@@ -150,6 +247,7 @@ describe('SQL des listes jury', () => {
       });
       const movie = await insertMovie(`film-note-${status}`, true, 'France');
 
+      await assign(jury.id, movie);
       await ratingModel.create(jury.id, movie, 8, 'un beau film');
       await db.execute('UPDATE movie SET status = ? WHERE id = ?', [
         status,
@@ -194,6 +292,8 @@ describe('SQL des listes jury', () => {
     const jury = await createUser({ email: 'c@test.com', roles: [Role.Jury] });
     const orphan = await insertMovie('film-sans-realisateur', false);
 
+    // Dans le lot, là encore : c'est le réalisateur manquant qui doit l'écarter.
+    await assign(jury.id, orphan);
     await ratingModel.create(jury.id, orphan, 5);
 
     expect(await ratingModel.findRatedMoviesByUserId(jury.id)).toEqual([]);

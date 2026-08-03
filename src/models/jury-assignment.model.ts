@@ -150,6 +150,32 @@ const create = async (userId: number, movieId: number): Promise<number> => {
 };
 
 /**
+ * Ce film est-il dans le lot de ce juré ?
+ *
+ * La garde de `POST /movies/:id/ratings`, qui prend un id dans l'URL et n'a
+ * aucune raison de faire confiance à la liste dont il sort — le même
+ * raisonnement que les gardes de statut de rating.service.
+ *
+ * Interrogé sur le couple et non sur le seul film : deux jurés se partagent un
+ * film, le refus est personnel. `LIMIT 1` parce qu'on ne veut qu'une réponse
+ * booléenne, et la contrainte UNIQUE (user_id, movie_id) borne déjà à une ligne.
+ *
+ * La notation ne retire pas la ligne : un film déjà noté reste dans le lot, ce
+ * qui laisse le juré corriger sa note.
+ */
+const isAssigned = async (
+  userId: number,
+  movieId: number,
+): Promise<boolean> => {
+  const [rows] = await db.execute<RowDataPacket[]>(
+    'SELECT 1 FROM jury_assignment WHERE user_id = ? AND movie_id = ? LIMIT 1',
+    [userId, movieId],
+  );
+
+  return rows.length > 0;
+};
+
+/**
  * Le nombre d'attributions en base — la question « l'attribution a-t-elle déjà
  * eu lieu ? », à laquelle le service répond par un refus.
  */
@@ -179,6 +205,7 @@ const deleteAll = async (): Promise<number> => {
 const juryAssignmentModel = {
   createMany,
   create,
+  isAssigned,
   count,
   deleteAll,
   remove,

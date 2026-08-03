@@ -43,6 +43,20 @@ const createAcceptedMovie = (
 ): ReturnType<typeof createMovie> =>
   createMovie({ ...options, status: 'accepted' });
 
+/**
+ * Confie un film à un juré.
+ *
+ * Depuis le filtre du lot, `/movies/to-rate` ne sert que les films attribués :
+ * tout test qui en attend une liste non vide doit passer par ici. Sans cela il
+ * passerait au vert en n'exerçant plus que le lot vide.
+ */
+const assign = async (userId: number, movieId: number): Promise<void> => {
+  await db.execute(
+    'INSERT INTO jury_assignment (user_id, movie_id) VALUES (?, ?)',
+    [userId, movieId],
+  );
+};
+
 beforeEach(async () => {
   await resetDatabase();
 });
@@ -381,15 +395,82 @@ describe('POST /movies/:id/ratings', () => {
     expect((await rate(999999, cookie)).status).toBe(404);
   });
 
-  it('enregistre la note du juré sur un film accepté', async () => {
+  it('enregistre la note du juré sur un film accepté de son lot', async () => {
     const { user, cookie } = await createJury('votant@test.com');
     const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
 
     const res = await rate(movie.id, cookie);
 
     expect(res.status).toBe(201);
     const stored = await ratingModel.getByMovieIdAndUserId(user.id, movie.id);
     expect(stored).toMatchObject({ note: 7 });
+  });
+
+  /**
+   * Le pendant du filtre de `/movies/to-rate` : la file ne propose plus le film,
+   * la route de notation doit le refuser aussi. Elle prend son id dans l'URL,
+   * elle ne peut pas se reposer sur la liste dont il est censé sortir.
+   */
+  it("refuse de noter un film qui n'est pas dans le lot du juré", async () => {
+    const { user, cookie } = await createJury('hors-lot@test.com');
+    const movie = await createAcceptedMovie();
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(await ratingModel.getByMovieIdAndUserId(user.id, movie.id)).toBe(
+      null,
+    );
+  });
+
+  it('refuse de noter un film confié à un autre juré', async () => {
+    const { user, cookie } = await createJury('curieux@test.com');
+    const other = await createUser({
+      email: 'titulaire@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await createAcceptedMovie();
+    await assign(other.id, movie.id);
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(await ratingModel.getByMovieIdAndUserId(user.id, movie.id)).toBe(
+      null,
+    );
+  });
+
+  /**
+   * Une note posée hors lot — avant le déploiement du filtre, ou avant que
+   * l'admin ne retire le film du lot — devient figée, pas rouvrable. Elle reste
+   * en base et lisible : le lot borne l'écriture, pas la lecture.
+   */
+  it('refuse de corriger une note déjà posée hors du lot', async () => {
+    const { user, cookie } = await createJury('repentant@test.com');
+    const movie = await createAcceptedMovie();
+    await ratingModel.create(user.id, movie.id, 3, 'première impression');
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(
+      await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
+    ).toMatchObject({ note: 3, comment: 'première impression' });
+  });
+
+  it('laisse le juré corriger une note posée dans son lot', async () => {
+    const { user, cookie } = await createJury('correcteur@test.com');
+    const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
+    await ratingModel.create(user.id, movie.id, 3);
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(201);
+    expect(
+      await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
+    ).toMatchObject({ note: 7 });
   });
 
   /**
@@ -405,6 +486,8 @@ describe('POST /movies/:id/ratings', () => {
   ] as const)('refuse de noter un film au statut %s', async (status) => {
     const { user, cookie } = await createJury(`${status}@test.com`);
     const movie = await createMovie({ slug: `film-${status}`, status });
+    // Dans le lot : c'est bien le statut qui refuse, pas l'attribution.
+    await assign(user.id, movie.id);
 
     const res = await rate(movie.id, cookie);
 
@@ -548,6 +631,8 @@ describe('GET /movies/to-rate', () => {
       slug: 'film-a-faire',
       originalTitle: 'À faire',
     });
+    await assign(user.id, done.id);
+    await assign(user.id, todo.id);
     await ratingModel.create(user.id, done.id, 5);
 
     const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
@@ -557,12 +642,14 @@ describe('GET /movies/to-rate', () => {
   });
 
   it('compte encore un film que seul un autre juré a noté : chacun doit poser sa propre note', async () => {
-    const { cookie } = await createJury('independant@test.com');
+    const { user, cookie } = await createJury('independant@test.com');
     const other = await createUser({
       email: 'collegue@test.com',
       roles: [Role.Jury],
     });
     const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
+    await assign(other.id, movie.id);
     await ratingModel.create(other.id, movie.id, 8);
 
     const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
@@ -573,6 +660,7 @@ describe('GET /movies/to-rate', () => {
   it('répond une liste vide quand le juré a tout noté', async () => {
     const { user, cookie } = await createJury('assidu@test.com');
     const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
     await ratingModel.create(user.id, movie.id, 4);
 
     const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
@@ -588,17 +676,51 @@ describe('GET /movies/to-rate', () => {
    * une file à noter. Ils restent en revanche dans la liste « Notés ».
    */
   it('ignore les films que l’admin n’a pas acceptés', async () => {
-    const { cookie } = await createJury('perimetre@test.com');
+    const { user, cookie } = await createJury('perimetre@test.com');
     const visible = await createAcceptedMovie({ slug: 'film-accepte' });
-    await createMovie({ slug: 'film-en-attente', status: 'pending_review' });
-    await createMovie({ slug: 'film-a-corriger', status: 'pending_change' });
-    await createMovie({ slug: 'film-refuse', status: 'rejected' });
-    await createMovie({ slug: 'film-selectionne', status: 'selected' });
-    await createMovie({ slug: 'film-laureat', status: 'winner' });
+    const others = [
+      await createMovie({ slug: 'film-en-attente', status: 'pending_review' }),
+      await createMovie({ slug: 'film-a-corriger', status: 'pending_change' }),
+      await createMovie({ slug: 'film-refuse', status: 'rejected' }),
+      await createMovie({ slug: 'film-selectionne', status: 'selected' }),
+      await createMovie({ slug: 'film-laureat', status: 'winner' }),
+    ];
+
+    // Tous dans le lot, y compris ceux qui doivent en sortir : c'est bien le
+    // statut qu'on teste ici, pas l'attribution.
+    await assign(user.id, visible.id);
+    for (const movie of others) await assign(user.id, movie.id);
 
     const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
 
     expect(res.status).toBe(200);
     expect(res.body.map((m: { id: number }) => m.id)).toEqual([visible.id]);
+  });
+
+  /**
+   * Le filtre du lot vu de la route. Le SQL est couvert par rating.model.test ;
+   * ce qui se joue ici est qu'aucune couche intermédiaire ne le contourne.
+   */
+  it('ne propose que les films du lot du juré', async () => {
+    const { user, cookie } = await createJury('lot@test.com');
+    const mien = await createAcceptedMovie({ slug: 'film-de-mon-lot' });
+    await createAcceptedMovie({ slug: 'film-hors-de-mon-lot' });
+
+    await assign(user.id, mien.id);
+
+    const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((m: { id: number }) => m.id)).toEqual([mien.id]);
+  });
+
+  it("répond une liste vide au juré à qui rien n'a été attribué", async () => {
+    const { cookie } = await createJury('sans-lot@test.com');
+    await createAcceptedMovie({ slug: 'film-non-attribue' });
+
+    const res = await request(app).get('/movies/to-rate').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });
