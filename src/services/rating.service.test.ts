@@ -15,10 +15,14 @@ vi.mock('../models/rating.model.js', () => ({
     findMoviesWithRatingAverage: vi.fn(),
   },
 }));
+vi.mock('../models/jury-assignment.model.js', () => ({
+  default: { isAssigned: vi.fn() },
+}));
 
 import ratingService from './rating.service.js';
 import movieModel from '../models/movie.model.js';
 import ratingModel from '../models/rating.model.js';
+import juryAssignmentModel from '../models/jury-assignment.model.js';
 import { JURY_RATABLE_STATUS } from '../helpers/jury-visibility.js';
 import { MovieStatus } from '../types/enums/movie-status.enum.js';
 
@@ -34,6 +38,10 @@ const acceptedMovie = { id: 5, status: JURY_RATABLE_STATUS };
 describe('ratingService.rateMovieById', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Le film est dans le lot par défaut : les cas ci-dessous portent sur
+    // l'existence, le statut et l'écrasement de la note, pas sur l'attribution,
+    // qui a son propre bloc plus bas.
+    vi.mocked(juryAssignmentModel.isAssigned).mockResolvedValue(true);
   });
 
   it("lève une AppError 404 quand le film n'existe pas", async () => {
@@ -87,6 +95,59 @@ describe('ratingService.rateMovieById', () => {
     ).rejects.toThrowError(new AppError(403, 'Movie not open to jury rating'));
     expect(ratingModel.create).not.toHaveBeenCalled();
     expect(ratingModel.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Le lot fait partie des gardes de la notation, au même titre que le statut.
+   * La route prend un id dans l'URL : elle ne peut pas se reposer sur le filtre
+   * de `/movies/to-rate` pour la borner.
+   */
+  it("refuse de noter un film qui n'est pas dans le lot du juré", async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
+    vi.mocked(juryAssignmentModel.isAssigned).mockResolvedValue(false);
+
+    await expect(
+      ratingService.rateMovieById(5, 10, ratingRequest),
+    ).rejects.toThrowError(new AppError(403, 'Movie not assigned to you'));
+    expect(juryAssignmentModel.isAssigned).toHaveBeenCalledWith(10, 5);
+    expect(ratingModel.create).not.toHaveBeenCalled();
+    expect(ratingModel.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Le refus est le même qu'il y ait ou non une note antérieure : une note
+   * posée avant l'attribution devient figée, pas rouvrable. Le lot commande ce
+   * qu'un juré peut noter, pas ce qu'il peut relire — `/ratings/me` et
+   * `/movies/rated` continuent de la lui montrer.
+   */
+  it('refuse aussi de corriger une note déjà posée hors du lot', async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
+    vi.mocked(juryAssignmentModel.isAssigned).mockResolvedValue(false);
+    vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue({
+      id: 99,
+    } as never);
+
+    await expect(
+      ratingService.rateMovieById(5, 10, ratingRequest),
+    ).rejects.toThrowError(new AppError(403, 'Movie not assigned to you'));
+    expect(ratingModel.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Le statut passe avant le lot : sur un film refusé et non attribué, « le vote
+   * est clos » est la raison la plus fondamentale, et c'est celle que le juré
+   * doit lire. Sans cet ordre, le message dépendrait de l'ordre des `await`.
+   */
+  it('annonce le statut plutôt que le lot quand les deux manquent', async () => {
+    vi.mocked(movieModel.getById).mockResolvedValue({
+      id: 5,
+      status: MovieStatus.REJECTED,
+    } as never);
+    vi.mocked(juryAssignmentModel.isAssigned).mockResolvedValue(false);
+
+    await expect(
+      ratingService.rateMovieById(5, 10, ratingRequest),
+    ).rejects.toThrowError(new AppError(403, 'Movie not open to jury rating'));
   });
 });
 

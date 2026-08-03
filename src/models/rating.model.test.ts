@@ -93,7 +93,7 @@ describe('filtre du lot dans la file à noter', () => {
     expect(await ratingModel.findMoviesToRateByUserId(jury.id)).toEqual([]);
   });
 
-  it("ne propose pas le film confié à un autre juré", async () => {
+  it('ne propose pas le film confié à un autre juré', async () => {
     const jury = await createUser({
       email: 'lot-a@test.com',
       roles: [Role.Jury],

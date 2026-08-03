@@ -395,15 +395,82 @@ describe('POST /movies/:id/ratings', () => {
     expect((await rate(999999, cookie)).status).toBe(404);
   });
 
-  it('enregistre la note du juré sur un film accepté', async () => {
+  it('enregistre la note du juré sur un film accepté de son lot', async () => {
     const { user, cookie } = await createJury('votant@test.com');
     const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
 
     const res = await rate(movie.id, cookie);
 
     expect(res.status).toBe(201);
     const stored = await ratingModel.getByMovieIdAndUserId(user.id, movie.id);
     expect(stored).toMatchObject({ note: 7 });
+  });
+
+  /**
+   * Le pendant du filtre de `/movies/to-rate` : la file ne propose plus le film,
+   * la route de notation doit le refuser aussi. Elle prend son id dans l'URL,
+   * elle ne peut pas se reposer sur la liste dont il est censé sortir.
+   */
+  it("refuse de noter un film qui n'est pas dans le lot du juré", async () => {
+    const { user, cookie } = await createJury('hors-lot@test.com');
+    const movie = await createAcceptedMovie();
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(await ratingModel.getByMovieIdAndUserId(user.id, movie.id)).toBe(
+      null,
+    );
+  });
+
+  it('refuse de noter un film confié à un autre juré', async () => {
+    const { user, cookie } = await createJury('curieux@test.com');
+    const other = await createUser({
+      email: 'titulaire@test.com',
+      roles: [Role.Jury],
+    });
+    const movie = await createAcceptedMovie();
+    await assign(other.id, movie.id);
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(await ratingModel.getByMovieIdAndUserId(user.id, movie.id)).toBe(
+      null,
+    );
+  });
+
+  /**
+   * Une note posée hors lot — avant le déploiement du filtre, ou avant que
+   * l'admin ne retire le film du lot — devient figée, pas rouvrable. Elle reste
+   * en base et lisible : le lot borne l'écriture, pas la lecture.
+   */
+  it('refuse de corriger une note déjà posée hors du lot', async () => {
+    const { user, cookie } = await createJury('repentant@test.com');
+    const movie = await createAcceptedMovie();
+    await ratingModel.create(user.id, movie.id, 3, 'première impression');
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(403);
+    expect(
+      await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
+    ).toMatchObject({ note: 3, comment: 'première impression' });
+  });
+
+  it('laisse le juré corriger une note posée dans son lot', async () => {
+    const { user, cookie } = await createJury('correcteur@test.com');
+    const movie = await createAcceptedMovie();
+    await assign(user.id, movie.id);
+    await ratingModel.create(user.id, movie.id, 3);
+
+    const res = await rate(movie.id, cookie);
+
+    expect(res.status).toBe(201);
+    expect(
+      await ratingModel.getByMovieIdAndUserId(user.id, movie.id),
+    ).toMatchObject({ note: 7 });
   });
 
   /**
@@ -419,6 +486,8 @@ describe('POST /movies/:id/ratings', () => {
   ] as const)('refuse de noter un film au statut %s', async (status) => {
     const { user, cookie } = await createJury(`${status}@test.com`);
     const movie = await createMovie({ slug: `film-${status}`, status });
+    // Dans le lot : c'est bien le statut qui refuse, pas l'attribution.
+    await assign(user.id, movie.id);
 
     const res = await rate(movie.id, cookie);
 

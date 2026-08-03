@@ -253,6 +253,60 @@ describe('juryAssignmentModel.count', () => {
   });
 });
 
+/**
+ * La question que pose `POST /movies/:id/ratings` : ce film est-il dans le lot
+ * de ce juré ?
+ *
+ * Elle est posée au couple (juré, film) et non au seul film : deux jurés se
+ * partagent un film, et le refus doit être personnel. La contrainte UNIQUE
+ * garantit qu'il y a au plus une ligne à trouver.
+ */
+describe('juryAssignmentModel.isAssigned', () => {
+  it('reconnaît un film confié à ce juré', async () => {
+    const alice = await createJury('alice@test.com');
+    const film = await createMovie({ slug: 'film', status: 'accepted' });
+    await juryAssignmentModel.createMany([
+      { userId: alice.id, movieId: film.id },
+    ]);
+
+    expect(await juryAssignmentModel.isAssigned(alice.id, film.id)).toBe(true);
+  });
+
+  it("ne reconnaît pas un film qu'on n'a pas confié à ce juré", async () => {
+    const alice = await createJury('alice@test.com');
+    const film = await createMovie({ slug: 'film', status: 'accepted' });
+
+    expect(await juryAssignmentModel.isAssigned(alice.id, film.id)).toBe(false);
+  });
+
+  it("ne confond pas le lot d'un juré avec celui d'un autre", async () => {
+    const alice = await createJury('alice@test.com');
+    const bob = await createJury('bob@test.com');
+    const film = await createMovie({ slug: 'film', status: 'accepted' });
+    await juryAssignmentModel.createMany([
+      { userId: bob.id, movieId: film.id },
+    ]);
+
+    expect(await juryAssignmentModel.isAssigned(alice.id, film.id)).toBe(false);
+    expect(await juryAssignmentModel.isAssigned(bob.id, film.id)).toBe(true);
+  });
+
+  /**
+   * Les lignes d'attribution survivent à la notation : le lot reste le lot une
+   * fois le film noté. C'est ce qui permet à un juré de corriger sa note.
+   */
+  it('reconnaît encore un film du lot que le juré a déjà noté', async () => {
+    const alice = await createJury('alice@test.com');
+    const film = await createMovie({ slug: 'film', status: 'accepted' });
+    await juryAssignmentModel.createMany([
+      { userId: alice.id, movieId: film.id },
+    ]);
+    await ratingModel.create(alice.id, film.id, 7);
+
+    expect(await juryAssignmentModel.isAssigned(alice.id, film.id)).toBe(true);
+  });
+});
+
 describe('juryAssignmentModel.deleteAll', () => {
   /**
    * La remise à zéro ne touche que `jury_assignment`. C'est ce qui rend « les
