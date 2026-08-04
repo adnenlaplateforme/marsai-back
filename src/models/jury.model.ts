@@ -69,6 +69,32 @@ const findById = async (juryId: number): Promise<Jury | null> => {
   return result[0] ?? null;
 };
 
+/**
+ * Supprime un juré.
+ *
+ * Le JOIN sur `role_user` vérifie que l'utilisateur visé est bien un juré : sur
+ * un id d'administrateur, la requête ne supprime rien et renvoie 0, que le
+ * service traduit en 404. Sans ce filtre, `/juries/:id` permettrait de
+ * supprimer un administrateur. Même garde que `findById`.
+ *
+ * `DELETE u` ne vide que la ligne `user`. Le reste part par cascade :
+ * `role_user`, `jury_assignment` et `rating` portent toutes ON DELETE CASCADE
+ * sur `user_id`.
+ *
+ * Cette cascade emporte donc les notes du juré, et déplace la moyenne des films
+ * qu'il avait notés. C'est voulu — retirer un juré, c'est retirer sa voix — et
+ * irréversible.
+ */
+const remove = async (juryId: number): Promise<number> => {
+  const sql = `DELETE u FROM user u \
+    JOIN role_user ru ON ru.user_id = u.id AND ru.role_id = 2 \
+    WHERE u.id = ?`;
+
+  const [result] = await db.execute<ResultSetHeader>(sql, [juryId]);
+
+  return result.affectedRows;
+};
+
 const findInEmails = async (juries: { email: string }[]): Promise<Jury[]> => {
   const emails = juries.map((j) => j.email);
 
@@ -80,5 +106,12 @@ const findInEmails = async (juries: { email: string }[]): Promise<Jury[]> => {
   return res as Jury[];
 };
 
-const juryModel = { create, findAll, findProgress, findById, findInEmails };
+const juryModel = {
+  create,
+  findAll,
+  findProgress,
+  findById,
+  findInEmails,
+  remove,
+};
 export default juryModel;
