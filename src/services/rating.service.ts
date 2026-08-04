@@ -119,25 +119,24 @@ const getRatingsByMovieId = async (id: number): Promise<Rate[]> => {
 };
 
 /**
- * Renvoie la note posée par le juré courant sur un film.
+ * Renvoie la note posée par le juré courant sur un film, ou `null` s'il ne l'a
+ * pas encore notée.
  *
  * Sert au front à savoir s'il doit proposer un formulaire vierge ou préremplir
  * la note existante : `rateMovieById` écrase une note déjà posée plutôt que
- * d'en créer une seconde. Le garde est celui de la consultation, pas celui de
- * la notation : une note reste lisible sur un film passé en sélection.
+ * d'en créer une seconde. Les deux réponses sont donc nominales, et « pas
+ * encore noté » est même l'état de départ de tout film — d'où `null` plutôt
+ * qu'une exception. Seul le film introuvable reste un 404 : là, c'est bien la
+ * ressource de l'URL qui manque. Le garde est celui de la consultation, pas
+ * celui de la notation : une note reste lisible sur un film passé en sélection.
  */
 const getCurrentJuryRatingByMovieId = async (
   id: number,
   userId: number,
-): Promise<Rate> => {
+): Promise<Rate | null> => {
   const movie = await getMovieVisibleToJury(id);
 
-  const rating = await ratingModel.getByMovieIdAndUserId(userId, movie.id!);
-  if (!rating) {
-    throw new AppError(404, 'Rating not found');
-  }
-
-  return rating;
+  return await ratingModel.getByMovieIdAndUserId(userId, movie.id!);
 };
 
 const getRatedMoviesByJury = async (
