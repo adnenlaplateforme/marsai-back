@@ -36,15 +36,23 @@ const remove = async (id: number): Promise<void> => {
   if (affectedRows === 0) throw new AppError(404, 'Event not found');
 };
 
+/**
+ * L'existence est vérifiée d'abord, et le 404 n'est plus déduit du nombre de
+ * lignes modifiées : MySQL ne compte que les lignes *changées*, si bien qu'un
+ * formulaire d'édition renvoyant des valeurs identiques recevait « Event not
+ * found » alors que l'événement était bien là.
+ */
 const update = async (id: number, event: UpdateEventRequest): Promise<void> => {
+  const exists = await eventModel.existsById(id);
+  if (!exists) throw new AppError(404, 'Event not found');
+
   if (event.title && !event.slug) {
     event.slug = await generateUniqueSlug(event.title, async (slug) => {
       const existing = await eventModel.findBySlug(slug);
       return !!existing && existing.id !== id;
     });
   }
-  const affectedRows = await eventModel.update(id, event);
-  if (affectedRows === 0) throw new AppError(404, 'Event not found');
+  await eventModel.update(id, event);
 };
 
 const eventService = {

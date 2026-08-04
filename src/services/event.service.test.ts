@@ -7,6 +7,7 @@ vi.mock('../models/event.model.js', () => ({
     findAll: vi.fn(),
     findById: vi.fn(),
     findBySlug: vi.fn(),
+    existsById: vi.fn(),
     getRemainingSeats: vi.fn(),
     remove: vi.fn(),
     update: vi.fn(),
@@ -118,6 +119,7 @@ describe('eventService.update', () => {
   });
 
   it('génère un slug quand le titre change sans slug fourni', async () => {
+    vi.mocked(eventModel.existsById).mockResolvedValue(true);
     vi.mocked(eventModel.findBySlug).mockResolvedValue(null);
     vi.mocked(eventModel.update).mockResolvedValue(1);
 
@@ -130,12 +132,27 @@ describe('eventService.update', () => {
     expect(updated.slug).toBe('nouveau-titre');
   });
 
-  it('lève une AppError 404 quand aucune ligne affectée', async () => {
-    vi.mocked(eventModel.update).mockResolvedValue(0);
+  /**
+   * Le 404 se lit sur l'existence de l'événement, et non plus sur le nombre de
+   * lignes affectées : MySQL ne compte que les lignes réellement *changées*, si
+   * bien qu'un formulaire d'édition renvoyant des valeurs identiques passait
+   * pour un événement introuvable.
+   */
+  it("lève une AppError 404 quand l'événement n'existe pas", async () => {
+    vi.mocked(eventModel.existsById).mockResolvedValue(false);
 
     const body = { location: 'Paris' } as never;
     await expect(eventService.update(5, body)).rejects.toThrowError(
       new AppError(404, 'Event not found'),
     );
+    expect(eventModel.update).not.toHaveBeenCalled();
+  });
+
+  it('accepte une modification qui ne change aucune valeur', async () => {
+    vi.mocked(eventModel.existsById).mockResolvedValue(true);
+    vi.mocked(eventModel.update).mockResolvedValue(0);
+
+    const body = { location: 'Paris' } as never;
+    await expect(eventService.update(5, body)).resolves.toBeUndefined();
   });
 });
