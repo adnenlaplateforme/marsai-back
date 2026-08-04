@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import bookingService from '../services/booking.service.js';
 import participantService from '../services/participant.service.js';
 import { type BookingRequest } from '../types/schemas/booking-request.schema.js';
+import { parseId } from '../helpers/parse-id.js';
 
 const create: RequestHandler = async (req, res, next) => {
   try {
@@ -34,5 +35,16 @@ const unsubscribe: RequestHandler<{ token: string }> = async (
   }
 };
 
-const bookingController = { create, unsubscribe };
+const findByEvent: RequestHandler = async (req, res, next) => {
+  try {
+    const bookings = await bookingService.findByEventId(
+      parseId(req.params.id, 'event'),
+    );
+    return res.json(bookings);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const bookingController = { create, findByEvent, unsubscribe };
 export default bookingController;

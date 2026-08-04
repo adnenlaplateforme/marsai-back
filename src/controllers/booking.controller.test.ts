@@ -17,9 +17,16 @@ import emailService from '../services/email.service.js';
 import { resetDatabase } from '../helpers/resetDatabase.js';
 import {
   addEventTranslation,
+  authCookie,
   createBooking,
   createEvent,
 } from '../helpers/test-factories.js';
+import { Role } from '../types/enums/role.enum.js';
+
+// Les routes d'administration ne consultent pas l'utilisateur en base : isLogged
+// et isAdmin lisent le JWT, un cookie forgé suffit.
+const adminCookie = authCookie({ id: 1, roles: [Role.Admin] });
+const juryCookie = authCookie({ id: 2, roles: [Role.Jury] });
 
 /** Corps valide au regard de BookingRequestSchema. */
 const validBody = (eventId: number) => ({
@@ -346,5 +353,110 @@ describe('GET /bookings/unsubscribe/:token', () => {
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ message: 'Invalid or expired token' });
     expect(await countRows('booking')).toBe(1);
+  });
+});
+
+/**
+ * La liste des participants d'un événement.
+ *
+ * Elle sort des noms et des e-mails : c'est la seule route de ce fichier qui
+ * demande un administrateur, et les tests d'accès en dessous valent autant que
+ * ceux du contenu.
+ */
+describe('GET /events/:id/bookings', () => {
+  it('rend les participants dans leur ordre d’arrivée', async () => {
+    const event = await createEvent();
+    await createBooking(event.id, {
+      firstname: 'Alice',
+      lastname: 'Martin',
+      email: 'alice@test.com',
+      createdAt: '2026-07-02 10:00:00',
+    });
+    await createBooking(event.id, {
+      firstname: 'Bob',
+      lastname: 'Durand',
+      email: 'bob@test.com',
+      createdAt: '2026-07-01 10:00:00',
+    });
+
+    const res = await request(app)
+      .get(`/events/${event.id}/bookings`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0]).toMatchObject({
+      firstname: 'Bob',
+      lastname: 'Durand',
+      email: 'bob@test.com',
+    });
+  });
+
+  it('rend une liste vide quand personne n’a réservé', async () => {
+    const event = await createEvent();
+
+    const res = await request(app)
+      .get(`/events/${event.id}/bookings`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  /**
+   * Un événement saisi en anglais seulement a des participants comme un autre.
+   * L'existence se vérifie donc sur `event`, et non via findById qui joint la
+   * traduction — sinon la liste répondrait 404 sur un atelier bien réel.
+   */
+  it('liste les participants d’un événement non traduit en français', async () => {
+    const event = await createEvent({ lang: 'EN', title: 'Workshop' });
+    await createBooking(event.id);
+
+    const res = await request(app)
+      .get(`/events/${event.id}/bookings`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
+
+  it("renvoie 404 quand l'événement n'existe pas", async () => {
+    const res = await request(app)
+      .get('/events/999999/bookings')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ message: 'Event not found' });
+  });
+
+  it('renvoie 400 sur un identifiant non numérique', async () => {
+    const res = await request(app)
+      .get('/events/abc/bookings')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ message: 'Invalid event id' });
+  });
+
+  it("renvoie 401 quand la requête n'est pas authentifiée", async () => {
+    const event = await createEvent();
+    await createBooking(event.id);
+
+    const res = await request(app).get(`/events/${event.id}/bookings`);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ message: 'Token missing' });
+  });
+
+  it("renvoie 403 quand l'utilisateur n'est pas administrateur", async () => {
+    const event = await createEvent();
+    await createBooking(event.id);
+
+    const res = await request(app)
+      .get(`/events/${event.id}/bookings`)
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: 'Must be an admin' });
   });
 });

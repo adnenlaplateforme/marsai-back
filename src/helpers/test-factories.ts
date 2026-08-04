@@ -148,16 +148,30 @@ export const createBooking = async (
     firstname = 'Jean',
     lastname = 'Participant',
     email = 'participant@test.com',
-  }: { firstname?: string; lastname?: string; email?: string } = {},
+    // `created_at` a un DEFAULT CURRENT_TIMESTAMP : le passer explicitement est
+    // le seul moyen de fabriquer une réservation d'hier, donc de distinguer les
+    // réservations du jour de toutes les autres.
+    createdAt,
+  }: {
+    firstname?: string;
+    lastname?: string;
+    email?: string;
+    createdAt?: string;
+  } = {},
 ): Promise<{ id: number; participantId: number }> => {
   const [participant] = await db.execute<ResultSetHeader>(
     'INSERT INTO `participant` (`firstname`, `lastname`, `email`) VALUES (?, ?, ?)',
     [firstname, lastname, email],
   );
-  const [booking] = await db.execute<ResultSetHeader>(
-    'INSERT INTO `booking` (`event_id`, `participant_id`) VALUES (?, ?)',
-    [eventId, participant.insertId],
-  );
+  const [booking] = createdAt
+    ? await db.execute<ResultSetHeader>(
+        'INSERT INTO `booking` (`event_id`, `participant_id`, `created_at`) VALUES (?, ?, ?)',
+        [eventId, participant.insertId, createdAt],
+      )
+    : await db.execute<ResultSetHeader>(
+        'INSERT INTO `booking` (`event_id`, `participant_id`) VALUES (?, ?)',
+        [eventId, participant.insertId],
+      );
 
   return { id: booking.insertId, participantId: participant.insertId };
 };

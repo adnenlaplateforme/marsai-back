@@ -2,6 +2,16 @@ import type { RowDataPacket } from 'mysql2';
 export interface CountRow extends RowDataPacket {
   count: number;
 }
+/** Une réservation vue de l'administration : le participant, pas seulement l'id. */
+export interface EventBooking extends RowDataPacket {
+  id: number;
+  participant_id: number;
+  created_at: Date;
+  firstname: string | null;
+  lastname: string | null;
+  email: string;
+}
+
 export default interface Booking extends RowDataPacket {
   id: number;
   participant_id: number;
