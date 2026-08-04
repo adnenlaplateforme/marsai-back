@@ -265,7 +265,14 @@ describe('GET /movies/:id/ratings/me', () => {
     expect(res.body).toMatchObject({ message: 'Movie not found' });
   });
 
-  it("répond 404 quand le juré n'a pas encore noté le film", async () => {
+  /**
+   * Répondait 404 « Rating not found » sur le parcours le plus courant de
+   * l'app — un juré ouvrant un film qu'il n'a pas encore noté. Le front
+   * ignorait déjà la réponse en silence et affichait un formulaire vierge,
+   * mais chaque ouverture écrivait une exception dans la console du serveur.
+   * L'absence de note est une réponse, pas une erreur : 200 et un corps nul.
+   */
+  it("répond 200 avec un corps nul quand le juré n'a pas encore noté le film", async () => {
     const { cookie } = await createJury('pas-encore@test.com');
     const movie = await createAcceptedMovie();
 
@@ -273,8 +280,8 @@ describe('GET /movies/:id/ratings/me', () => {
       .get(`/movies/${movie.id}/ratings/me`)
       .set('Cookie', cookie);
 
-    expect(res.status).toBe(404);
-    expect(res.body).toMatchObject({ message: 'Rating not found' });
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
   });
 
   /**
@@ -321,7 +328,10 @@ describe('GET /movies/:id/ratings/me', () => {
       .get(`/movies/${movie.id}/ratings/me`)
       .set('Cookie', cookie);
 
-    expect(res.status).toBe(404);
+    // Le corps nul est ce qui prouve l'isolation : la route filtre sur le juré
+    // courant, la note de l'autre ne fuite pas dans la réponse.
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
   });
 
   /**

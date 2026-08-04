@@ -191,13 +191,19 @@ describe('ratingService.getCurrentJuryRatingByMovieId', () => {
     expect(ratingModel.getByMovieIdAndUserId).not.toHaveBeenCalled();
   });
 
-  it("lève une AppError 404 quand le juré n'a pas encore noté le film", async () => {
+  /**
+   * « Pas encore noté » est la moitié nominale de ce que la fonction sert à
+   * savoir, pas une panne : c'est l'état de tout film que le juré n'a pas
+   * encore ouvert. Le film, lui, existe — d'où `null` et non un 404, que le
+   * cas juste au-dessus garde pour un film réellement introuvable.
+   */
+  it("retourne null quand le juré n'a pas encore noté le film", async () => {
     vi.mocked(movieModel.getById).mockResolvedValue(acceptedMovie as never);
     vi.mocked(ratingModel.getByMovieIdAndUserId).mockResolvedValue(null);
 
     await expect(
       ratingService.getCurrentJuryRatingByMovieId(5, 10),
-    ).rejects.toThrowError(new AppError(404, 'Rating not found'));
+    ).resolves.toBeNull();
   });
 
   it('retourne la note du juré courant', async () => {
