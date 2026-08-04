@@ -85,7 +85,13 @@ describe('movieService.create', () => {
     expect(result).toEqual({ movieId: 10 });
   });
 
-  it("effectue un rollback et propage l'erreur en cas d'échec", async () => {
+  /**
+   * Le `catch` n'est là que pour le rollback : il relève l'erreur intacte. La
+   * loguer ici en plus doublerait chaque incident, `error-handler` écrivant
+   * déjà la même stack au bord de la requête. Deux stacks pour une panne
+   * coûtent le temps qu'on passe à vérifier qu'il ne s'en est produit qu'une.
+   */
+  it("effectue un rollback et propage l'erreur sans la loguer", async () => {
     vi.mocked(movieModel.getBySlug).mockResolvedValue(null);
     const dbError = new Error('insert failed');
     vi.mocked(movieModel.create).mockRejectedValue(dbError);
@@ -94,6 +100,7 @@ describe('movieService.create', () => {
 
     expect(db.rollback).toHaveBeenCalledOnce();
     expect(db.commit).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
 
@@ -129,7 +136,12 @@ describe('movieService.remove', () => {
     expect(db.rollback).not.toHaveBeenCalled();
   });
 
-  it('effectue un rollback et lève 404 quand aucune ligne affectée', async () => {
+  /**
+   * Ce 404 est levé *dans* le `try` pour que le rollback annule la suppression
+   * des collaborateurs et des images, déjà effectuée. Il traverse donc le
+   * `catch` sans être une panne — raison de plus pour ne pas y écrire de stack.
+   */
+  it('effectue un rollback et lève 404, sans loguer, quand aucune ligne affectée', async () => {
     vi.mocked(movieModel.remove).mockResolvedValue(0);
 
     await expect(movieService.remove(5)).rejects.toThrowError(
@@ -137,6 +149,7 @@ describe('movieService.remove', () => {
     );
     expect(db.rollback).toHaveBeenCalledOnce();
     expect(db.commit).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
 
