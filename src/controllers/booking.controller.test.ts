@@ -460,3 +460,46 @@ describe('GET /events/:id/bookings', () => {
     expect(res.body).toEqual({ message: 'Must be an admin' });
   });
 });
+
+describe('GET /bookings/stats', () => {
+  it('compte toutes les réservations et celles du jour', async () => {
+    const event = await createEvent();
+    await createBooking(event.id, {
+      email: 'ancien@test.com',
+      createdAt: '2026-01-01 09:00:00',
+    });
+    await createBooking(event.id, { email: 'aujourdhui@test.com' });
+
+    const res = await request(app)
+      .get('/bookings/stats')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ total: 2, today: 1 });
+  });
+
+  it('rend des zéros quand aucune réservation n’existe', async () => {
+    const res = await request(app)
+      .get('/bookings/stats')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ total: 0, today: 0 });
+  });
+
+  it("renvoie 401 quand la requête n'est pas authentifiée", async () => {
+    const res = await request(app).get('/bookings/stats');
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ message: 'Token missing' });
+  });
+
+  it("renvoie 403 quand l'utilisateur n'est pas administrateur", async () => {
+    const res = await request(app)
+      .get('/bookings/stats')
+      .set('Cookie', juryCookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: 'Must be an admin' });
+  });
+});

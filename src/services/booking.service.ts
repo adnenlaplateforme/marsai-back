@@ -65,6 +65,10 @@ const findByEventId = async (eventId: number): Promise<EventBooking[]> => {
   return await bookingModel.findByEventId(eventId);
 };
 
+const getStats = async (): Promise<{ total: number; today: number }> => {
+  return await bookingModel.countTotals();
+};
+
 const unsubscribe = async (token: string): Promise<number> => {
   // Le lien de désinscription vient d'un email et vit 7 jours : un token
   // expiré ou trafiqué est une erreur d'appelant, pas une erreur serveur.
@@ -78,6 +82,6 @@ const unsubscribe = async (token: string): Promise<number> => {
   return await bookingModel.remove(payload.id);
 };
 
-const bookingService = { create, findByEventId, unsubscribe };
+const bookingService = { create, findByEventId, getStats, unsubscribe };
 
 export default bookingService;

@@ -46,5 +46,13 @@ const findByEvent: RequestHandler = async (req, res, next) => {
   }
 };
 
-const bookingController = { create, findByEvent, unsubscribe };
+const stats: RequestHandler = async (_req, res, next) => {
+  try {
+    return res.json(await bookingService.getStats());
+  } catch (error) {
+    next(error);
+  }
+};
+
+const bookingController = { create, findByEvent, stats, unsubscribe };
 export default bookingController;

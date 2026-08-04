@@ -12,6 +12,11 @@ export interface EventBooking extends RowDataPacket {
   email: string;
 }
 
+export interface BookingTotalsRow extends RowDataPacket {
+  total: number;
+  today: number | string;
+}
+
 export default interface Booking extends RowDataPacket {
   id: number;
   participant_id: number;

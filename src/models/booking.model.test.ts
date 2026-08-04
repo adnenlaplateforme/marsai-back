@@ -1,7 +1,7 @@
-// La nouvelle requête de booking.model est du SQL et rien d'autre : une jointure
-// vers participant, un tri chronologique. Comme pour jury-assignment, seule la
-// vraie base exerce la jointure et l'ordre — un mock ne dirait que ce qu'on lui
-// a soufflé.
+// Les deux nouvelles requêtes de booking.model sont du SQL et rien d'autre : une
+// jointure vers participant et une agrégation datée. Comme pour jury-assignment,
+// seule la vraie base exerce le LEFT JOIN, le tri et le COALESCE — un mock ne
+// dirait que ce qu'on lui a soufflé.
 import { describe, it, expect, beforeEach } from 'vitest';
 import bookingModel from './booking.model.js';
 import { resetDatabase } from '../helpers/resetDatabase.js';
@@ -66,5 +66,33 @@ describe('bookingModel.findByEventId', () => {
     const event = await createEvent();
 
     expect(await bookingModel.findByEventId(event.id)).toEqual([]);
+  });
+});
+
+describe('bookingModel.countTotals', () => {
+  it('compte toutes les réservations et celles du jour', async () => {
+    const event = await createEvent();
+    await createBooking(event.id, {
+      email: 'ancien@test.com',
+      createdAt: '2026-01-01 09:00:00',
+    });
+    await createBooking(event.id, { email: 'aujourdhui@test.com' });
+    await createBooking(event.id, { email: 'encore@test.com' });
+
+    const totals = await bookingModel.countTotals();
+
+    expect(totals).toEqual({ total: 3, today: 2 });
+  });
+
+  /**
+   * `SUM()` sur zéro ligne rend NULL, et mysql2 rend les agrégats DECIMAL en
+   * chaîne : sans COALESCE ni conversion, le tableau de bord afficherait
+   * « null » ou comparerait `'2'` à `2`.
+   */
+  it('rend deux zéros, et non null, quand aucune réservation n’existe', async () => {
+    const totals = await bookingModel.countTotals();
+
+    expect(totals).toEqual({ total: 0, today: 0 });
+    expect(typeof totals.today).toBe('number');
   });
 });
