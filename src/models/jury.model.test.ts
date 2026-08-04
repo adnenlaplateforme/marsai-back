@@ -3,8 +3,9 @@
 // le GROUP BY et le LEFT JOIN sont réellement exercés — un mock du modèle les
 // laisserait entièrement hors de portée.
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ResultSetHeader } from 'mysql2/promise';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import db from '../database/connection.js';
+import juryAssignmentModel from './jury-assignment.model.js';
 import juryModel from './jury.model.js';
 import ratingModel from './rating.model.js';
 import { resetDatabase } from '../helpers/resetDatabase.js';
@@ -132,5 +133,111 @@ describe('juryModel.findById', () => {
 
   it('renvoie null sur un identifiant inconnu', async () => {
     expect(await juryModel.findById(999999)).toBeNull();
+  });
+});
+
+/**
+ * La suppression porte sur la ligne `user`, et les cascades du schéma font le
+ * reste. Les tests qui suivent fixent cette portée : elle est large, et c'est un
+ * choix — un juré supprimé emporte ses notes, donc les moyennes des films qu'il
+ * avait notés changent. Autant que le filet le dise.
+ */
+describe('juryModel.remove', () => {
+  it('supprime un juré et renvoie le nombre de lignes touchées', async () => {
+    const jure = await createUser({
+      email: 'a-supprimer@test.com',
+      roles: [Role.Jury],
+    });
+
+    expect(await juryModel.remove(jure.id)).toBe(1);
+    expect(await juryModel.findById(jure.id)).toBeNull();
+  });
+
+  /**
+   * Le filtre sur le rôle est la raison d'être de la requête, comme pour
+   * `findById` : `/juries/:id` ne doit jamais servir à supprimer un
+   * administrateur. Sans lui, un id d'admin passé à cette route effacerait le
+   * compte — et un `DELETE FROM user WHERE id = ?` n'y verrait que du feu.
+   */
+  it("ne supprime pas un utilisateur qui n'est pas juré", async () => {
+    const admin = await createUser({
+      email: 'admin-intouchable@test.com',
+      roles: [Role.Admin],
+    });
+
+    expect(await juryModel.remove(admin.id)).toBe(0);
+    expect(await juryModel.findById(admin.id)).toBeNull();
+
+    const [reste] = await db.execute<RowDataPacket[]>(
+      'SELECT id FROM user WHERE id = ?',
+      [admin.id],
+    );
+    expect(reste).toHaveLength(1);
+  });
+
+  it('renvoie zéro sur un identifiant inconnu', async () => {
+    expect(await juryModel.remove(999999)).toBe(0);
+  });
+
+  /**
+   * La cascade de `rating.user_id` : les notes du juré partent avec lui. C'est
+   * la contrepartie assumée de la suppression franche, et ce qui déplace la
+   * moyenne des films concernés.
+   */
+  it('emporte les notes du juré', async () => {
+    const jure = await createUser({
+      email: 'note-puis-supprime@test.com',
+      roles: [Role.Jury],
+    });
+    const film = await insertMovie('film-note');
+    await ratingModel.create(jure.id, film, 7);
+
+    await juryModel.remove(jure.id);
+
+    const [notes] = await db.execute<RowDataPacket[]>(
+      'SELECT id FROM rating WHERE user_id = ?',
+      [jure.id],
+    );
+    expect(notes).toHaveLength(0);
+  });
+
+  /** Même cascade sur `jury_assignment` : son lot disparaît avec lui. */
+  it('emporte les attributions du juré', async () => {
+    const jure = await createUser({
+      email: 'lot-puis-supprime@test.com',
+      roles: [Role.Jury],
+    });
+    const film = await insertMovie('film-attribue');
+    await juryAssignmentModel.create(jure.id, film);
+
+    await juryModel.remove(jure.id);
+
+    expect(await juryAssignmentModel.isAssigned(jure.id, film)).toBe(false);
+  });
+
+  /**
+   * Le pendant du test précédent : la cascade ne doit toucher que le juré visé.
+   * Les notes des autres survivent, sinon une suppression viderait le classement.
+   */
+  it('laisse intactes les notes des autres jurés', async () => {
+    const partant = await createUser({
+      email: 'partant@test.com',
+      roles: [Role.Jury],
+    });
+    const restant = await createUser({
+      email: 'restant@test.com',
+      roles: [Role.Jury],
+    });
+    const film = await insertMovie('film-partage');
+    await ratingModel.create(partant.id, film, 3);
+    await ratingModel.create(restant.id, film, 9);
+
+    await juryModel.remove(partant.id);
+
+    const [notes] = await db.execute<RowDataPacket[]>(
+      'SELECT user_id FROM rating',
+      [],
+    );
+    expect(notes.map((n) => n.user_id)).toEqual([restant.id]);
   });
 });

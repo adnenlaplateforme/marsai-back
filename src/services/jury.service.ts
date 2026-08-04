@@ -40,6 +40,24 @@ const create = async (body: CreateJury): Promise<void> => {
   }
 };
 
-const juryService = { findAll, findProgress, create };
+/**
+ * Retire un juré du festival.
+ *
+ * Le 404 sur zéro ligne couvre deux cas que l'admin n'a pas à distinguer : l'id
+ * n'existe pas, ou il désigne quelqu'un qui n'est pas juré. Sans lui, une erreur
+ * de frappe renverrait un succès et laisserait croire que le juré est parti.
+ *
+ * Pas de transaction : c'est une seule requête, et les cascades du schéma sont
+ * atomiques avec elle.
+ */
+const remove = async (juryId: number): Promise<void> => {
+  const removed = await juryModel.remove(juryId);
+
+  if (removed === 0) {
+    throw new AppError(404, 'Jury not found');
+  }
+};
+
+const juryService = { findAll, findProgress, create, remove };
 
 export default juryService;

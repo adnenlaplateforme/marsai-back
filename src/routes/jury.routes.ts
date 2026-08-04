@@ -14,5 +14,9 @@ juryRouter.get('/', isLogged, isAdmin, juryController.findAll);
 // dernière sert aussi la page publique du jury.
 juryRouter.get('/progress', isLogged, isAdmin, juryController.findProgress);
 juryRouter.post('/', validate(CreateJurySchema), juryController.create);
+// Réservée à l'admin, comme les lectures ci-dessus mais pour une raison plus
+// lourde : la suppression emporte les notes du juré par cascade. Un juré qui
+// pourrait supprimer ses pairs déciderait seul du classement.
+juryRouter.delete('/:id', isLogged, isAdmin, juryController.remove);
 
 export default juryRouter;

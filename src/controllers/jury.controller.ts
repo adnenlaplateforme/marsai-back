@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { parseId } from '../helpers/parse-id.js';
 import juryService from '../services/jury.service.js';
 
 const create: RequestHandler = async (req, res, next) => {
@@ -28,6 +29,15 @@ const findProgress: RequestHandler = async (_req, res, next) => {
   }
 };
 
-const juryController = { findAll, findProgress, create };
+const remove: RequestHandler = async (req, res, next) => {
+  try {
+    await juryService.remove(parseId(req.params.id, 'jury'));
+    res.status(204).send();
+  } catch (e) {
+    next(e);
+  }
+};
+
+const juryController = { findAll, findProgress, create, remove };
 
 export default juryController;
