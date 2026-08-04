@@ -103,9 +103,10 @@ export const addEventTranslation = async (
 /**
  * Crée un événement et sa traduction en base de test.
  *
- * POST /events répond 201 sans corps : l'API ne renvoie jamais l'id du nouvel
- * événement. Les tests qui doivent ensuite cibler cet événement (findById,
- * update, remove) ne peuvent donc pas passer par l'API et insèrent directement.
+ * POST /events rend bien l'id du nouvel événement, mais il exige un corps
+ * complet et un cookie d'administrateur : insérer directement laisse un test
+ * poser l'état dont il a besoin — une traduction anglaise seule, une date
+ * passée — sans écrire la moitié d'un formulaire à chaque fois.
  *
  * `slug` est UNIQUE en base : le passer explicitement dès qu'un test crée
  * plusieurs événements.

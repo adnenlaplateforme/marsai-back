@@ -36,6 +36,26 @@ beforeEach(async () => {
 });
 
 describe('POST /events', () => {
+  /**
+   * L'identifiant est la seule chose que l'appelant ne peut pas deviner : le
+   * slug est calculé côté serveur, et rien d'autre n'identifie l'événement de
+   * façon sûre. Sans lui, un client qui vient de créer un événement ne peut pas
+   * enchaîner dessus — ajouter la traduction anglaise, par exemple — sans
+   * relire toute la liste et parier sur le titre.
+   */
+  it("répond 201 avec l'identifiant du nouvel événement", async () => {
+    const res = await request(app)
+      .post('/events')
+      .set('Cookie', adminCookie)
+      .send(validBody);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ id: expect.any(Number) });
+
+    const relu = await request(app).get(`/events/${res.body.id}`);
+    expect(relu.body).toMatchObject({ title: 'Projection de gala' });
+  });
+
   it("crée l'événement et répond 201", async () => {
     const res = await request(app)
       .post('/events')

@@ -5,14 +5,14 @@ import type { Event } from '../types/interfaces/event.interface.js';
 import AppError from '../helpers/AppError.js';
 import { generateUniqueSlug } from '../helpers/string-utils.js';
 
-const create = async (body: CreateEventRequest): Promise<void> => {
+const create = async (body: CreateEventRequest): Promise<number> => {
   if (!body.slug) {
     body.slug = await generateUniqueSlug(body.title, async (slug) => {
       const exists = await eventModel.findBySlug(slug);
       return !!exists;
     });
   }
-  await eventModel.create(body);
+  return await eventModel.create(body);
 };
 
 const findAll = async (lang?: string): Promise<Event[]> => {

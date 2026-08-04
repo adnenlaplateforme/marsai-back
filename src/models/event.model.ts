@@ -4,7 +4,9 @@ import type { UpdateEventRequest } from '../types/schemas/update-event-request.s
 import type { Event } from '../types/interfaces/event.interface.js';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 
-const create = async (event: CreateEventRequest): Promise<void> => {
+/** Rend l'identifiant créé : c'est la seule donnée que l'appelant ne peut pas
+ * reconstituer, le slug étant calculé ici. */
+const create = async (event: CreateEventRequest): Promise<number> => {
   const [result] = await db.execute<ResultSetHeader>(
     `INSERT INTO event (slug, date, published_at, duration, location, is_bookable, capacity)
     VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -22,6 +24,8 @@ const create = async (event: CreateEventRequest): Promise<void> => {
     `INSERT INTO event_translation (event_id, lang, title, description) VALUES (?, ?, ?, ?)`,
     [result.insertId, event.lang, event.title, event.description],
   );
+
+  return result.insertId;
 };
 
 const findAll = async (lang = 'FR'): Promise<Event[]> => {
