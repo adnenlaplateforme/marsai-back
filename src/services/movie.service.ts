@@ -36,7 +36,6 @@ const create = async (movieRequest: MovieRequest): Promise<MovieResponse> => {
     };
     return response;
   } catch (err) {
-    console.error(err);
     await db.rollback();
     throw err;
   }
@@ -69,7 +68,6 @@ const remove = async (id: number): Promise<void> => {
 
     await db.commit();
   } catch (err) {
-    console.error(err);
     await db.rollback();
     throw err;
   }
