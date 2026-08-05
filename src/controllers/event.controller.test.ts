@@ -36,6 +36,43 @@ beforeEach(async () => {
 });
 
 describe('POST /events', () => {
+  /**
+   * L'identifiant est la seule chose que l'appelant ne peut pas deviner : le
+   * slug est calculé côté serveur, et rien d'autre n'identifie l'événement de
+   * façon sûre. Sans lui, un client qui vient de créer un événement ne peut pas
+   * enchaîner dessus — ajouter la traduction anglaise, par exemple — sans
+   * relire toute la liste et parier sur le titre.
+   */
+  it("répond 201 avec l'identifiant du nouvel événement", async () => {
+    const res = await request(app)
+      .post('/events')
+      .set('Cookie', adminCookie)
+      .send(validBody);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ id: expect.any(Number) });
+
+    const relu = await request(app).get(`/events/${res.body.id}`);
+    expect(relu.body).toMatchObject({ title: 'Projection de gala' });
+  });
+
+  /** Le parcours du formulaire d'ajout : créer en français, compléter en anglais. */
+  it('laisse compléter la traduction anglaise juste après la création', async () => {
+    const cree = await request(app)
+      .post('/events')
+      .set('Cookie', adminCookie)
+      .send(validBody);
+
+    await request(app)
+      .put(`/events/${cree.body.id}`)
+      .set('Cookie', adminCookie)
+      .send({ lang: 'EN', title: 'Gala screening', description: 'Evening' });
+
+    const en = await request(app).get('/events').query({ lang: 'EN' });
+    expect(en.body).toHaveLength(1);
+    expect(en.body[0]).toMatchObject({ title: 'Gala screening' });
+  });
+
   it("crée l'événement et répond 201", async () => {
     const res = await request(app)
       .post('/events')
@@ -291,6 +328,68 @@ describe('PUT /events/:id', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ message: 'Validation failed' });
+  });
+
+  /**
+   * Un événement saisi dans une seule langue est invisible sur l'autre version
+   * du site, `GET /events?lang=` filtrant sur la traduction. La modification
+   * doit donc pouvoir *créer* la traduction manquante : un simple UPDATE ne
+   * toucherait aucune ligne et ne signalerait rien.
+   */
+  it('crée la traduction qui manque au lieu de ne rien faire', async () => {
+    const event = await createEvent({ title: 'Projection', lang: 'FR' });
+
+    const res = await request(app)
+      .put(`/events/${event.id}`)
+      .set('Cookie', adminCookie)
+      .send({ lang: 'EN', title: 'Screening', description: 'Nice evening' });
+
+    expect(res.status).toBe(200);
+
+    const en = await request(app)
+      .get(`/events/${event.id}`)
+      .query({ lang: 'EN' });
+    expect(en.status).toBe(200);
+    expect(en.body).toMatchObject({
+      title: 'Screening',
+      description: 'Nice evening',
+    });
+  });
+
+  it('conserve la description quand seul le titre est modifié', async () => {
+    const event = await createEvent({
+      title: 'Ancien titre',
+      description: 'Description à garder',
+      lang: 'FR',
+    });
+
+    await request(app)
+      .put(`/events/${event.id}`)
+      .set('Cookie', adminCookie)
+      .send({ lang: 'FR', title: 'Nouveau titre' });
+
+    const relu = await request(app).get(`/events/${event.id}`);
+    expect(relu.body).toMatchObject({
+      title: 'Nouveau titre',
+      description: 'Description à garder',
+    });
+  });
+
+  /**
+   * MySQL ne compte que les lignes réellement changées : renvoyer la capacité
+   * déjà en base donnait `affectedRows = 0`, que le service prenait pour un
+   * événement introuvable. C'est très exactement ce que fait un formulaire
+   * d'édition qu'on ouvre et qu'on renvoie sans y toucher.
+   */
+  it('accepte une modification qui ne change aucune valeur', async () => {
+    const event = await createEvent({ capacity: 100 });
+
+    const res = await request(app)
+      .put(`/events/${event.id}`)
+      .set('Cookie', adminCookie)
+      .send({ capacity: 100 });
+
+    expect(res.status).toBe(200);
   });
 
   it("renvoie 404 quand l'événement n'existe pas", async () => {

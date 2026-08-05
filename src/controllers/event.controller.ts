@@ -4,8 +4,8 @@ import { parseId } from '../helpers/parse-id.js';
 
 const create: RequestHandler = async (req, res, next) => {
   try {
-    await eventService.create(req.body);
-    return res.status(201).send();
+    const id = await eventService.create(req.body);
+    return res.status(201).json({ id });
   } catch (err) {
     next(err);
   }

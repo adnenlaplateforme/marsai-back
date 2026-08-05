@@ -4,7 +4,9 @@ import type { UpdateEventRequest } from '../types/schemas/update-event-request.s
 import type { Event } from '../types/interfaces/event.interface.js';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 
-const create = async (event: CreateEventRequest): Promise<void> => {
+/** Rend l'identifiant créé : c'est la seule donnée que l'appelant ne peut pas
+ * reconstituer, le slug étant calculé ici. */
+const create = async (event: CreateEventRequest): Promise<number> => {
   const [result] = await db.execute<ResultSetHeader>(
     `INSERT INTO event (slug, date, published_at, duration, location, is_bookable, capacity)
     VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -22,6 +24,8 @@ const create = async (event: CreateEventRequest): Promise<void> => {
     `INSERT INTO event_translation (event_id, lang, title, description) VALUES (?, ?, ?, ?)`,
     [result.insertId, event.lang, event.title, event.description],
   );
+
+  return result.insertId;
 };
 
 const findAll = async (lang = 'FR'): Promise<Event[]> => {
@@ -63,6 +67,21 @@ const findBySlug = async (slug: string, lang = 'FR'): Promise<Event | null> => {
     [lang, slug],
   );
   return rows[0] ?? null;
+};
+
+/**
+ * L'événement existe-t-il, quelle que soit sa langue ?
+ *
+ * `findById` ne sert pas à cela : il joint `event_translation` et rendrait
+ * `null` sur un événement bien présent mais non traduit dans la langue demandée.
+ * Une liste de participants ne doit pas dépendre d'une traduction.
+ */
+const existsById = async (id: number): Promise<boolean> => {
+  const [rows] = await db.query<RowDataPacket[]>(
+    'SELECT 1 FROM event WHERE id = ?',
+    [id],
+  );
+  return rows.length > 0;
 };
 
 const getRemainingSeats = async (id: number): Promise<number | null> => {
@@ -119,12 +138,32 @@ const update = async (
     affectedRows = result.affectedRows;
   }
 
-  if (translationCols.length > 0 && event.lang) {
+  if (event.lang && event.title !== undefined) {
+    // Un upsert quand le titre est là : la traduction demandée peut ne pas
+    // exister encore — c'est le cas de tout événement saisi dans une seule
+    // langue — et un UPDATE n'y toucherait aucune ligne sans rien signaler.
+    // `description` n'entre dans la mise à jour que si elle est fournie :
+    // corriger un titre seul ne doit pas effacer le texte existant.
+    const onDuplicate = ['title = VALUES(title)'];
+    if (event.description !== undefined) {
+      onDuplicate.push('description = VALUES(description)');
+    }
+
+    const [result] = await db.execute<ResultSetHeader>(
+      `INSERT INTO event_translation (event_id, lang, title, description)
+      VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE ${onDuplicate.join(', ')}`,
+      [id, event.lang, event.title, event.description ?? ''],
+    );
+    affectedRows += result.affectedRows;
+  } else if (translationCols.length > 0 && event.lang) {
+    // Une description seule ne peut que modifier : `title` est NOT NULL, il n'y
+    // a pas de quoi créer la ligne si elle manque.
     const [result] = await db.execute<ResultSetHeader>(
       `UPDATE event_translation SET ${translationCols.join(', ')} WHERE event_id = ? AND lang = ?`,
       [...translationVals, id, event.lang],
     );
-    if (affectedRows === 0) affectedRows = result.affectedRows;
+    affectedRows += result.affectedRows;
   }
 
   return affectedRows;
@@ -145,6 +184,7 @@ const eventModel = {
   remove,
   findById,
   findBySlug,
+  existsById,
   getRemainingSeats,
 };
 
