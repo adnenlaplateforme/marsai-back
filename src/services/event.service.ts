@@ -41,17 +41,18 @@ const remove = async (id: number): Promise<void> => {
  * lignes modifiées : MySQL ne compte que les lignes *changées*, si bien qu'un
  * formulaire d'édition renvoyant des valeurs identiques recevait « Event not
  * found » alors que l'événement était bien là.
+ *
+ * Le slug, lui, n'est pas recalculé. C'est l'adresse publique de l'événement :
+ * la déplacer à chaque renommage casserait les liens déjà diffusés. Il naît du
+ * titre français à la création et n'en bouge plus, sauf si l'appelant en impose
+ * un explicitement. Il vit d'ailleurs dans `event`, partagé par les deux
+ * langues, si bien que le régénérer laissait un second PUT en anglais donner un
+ * slug anglais à un atelier français.
  */
 const update = async (id: number, event: UpdateEventRequest): Promise<void> => {
   const exists = await eventModel.existsById(id);
   if (!exists) throw new AppError(404, 'Event not found');
 
-  if (event.title && !event.slug) {
-    event.slug = await generateUniqueSlug(event.title, async (slug) => {
-      const existing = await eventModel.findBySlug(slug);
-      return !!existing && existing.id !== id;
-    });
-  }
   await eventModel.update(id, event);
 };
 

@@ -118,18 +118,38 @@ describe('eventService.update', () => {
     vi.clearAllMocks();
   });
 
-  it('génère un slug quand le titre change sans slug fourni', async () => {
+  /**
+   * Le slug est l'adresse publique d'un événement : il naît du titre français à
+   * la création puis ne bouge plus. Le régénérer à chaque renommage changeait
+   * l'URL sous les liens déjà diffusés — et, l'édition étant bilingue, un second
+   * PUT en anglais suffisait à donner un slug anglais à un atelier français,
+   * puisque le slug vit dans `event` et non dans `event_translation`.
+   */
+  it('ne touche pas au slug quand le titre change', async () => {
     vi.mocked(eventModel.existsById).mockResolvedValue(true);
-    vi.mocked(eventModel.findBySlug).mockResolvedValue(null);
     vi.mocked(eventModel.update).mockResolvedValue(1);
 
-    const body = { title: 'Nouveau Titre' } as never;
+    const body = { lang: 'FR', title: 'Nouveau Titre' } as never;
     await eventService.update(5, body);
+
+    expect(eventModel.findBySlug).not.toHaveBeenCalled();
+    const updated = vi.mocked(eventModel.update).mock.calls[0]?.[1] as {
+      slug?: string;
+    };
+    expect(updated.slug).toBeUndefined();
+  });
+
+  it('laisse passer un slug choisi explicitement dans le corps', async () => {
+    vi.mocked(eventModel.existsById).mockResolvedValue(true);
+    vi.mocked(eventModel.update).mockResolvedValue(1);
+
+    const body = { lang: 'FR', title: 'Nouveau Titre', slug: 'slug-choisi' };
+    await eventService.update(5, body as never);
 
     const updated = vi.mocked(eventModel.update).mock.calls[0]?.[1] as {
       slug: string;
     };
-    expect(updated.slug).toBe('nouveau-titre');
+    expect(updated.slug).toBe('slug-choisi');
   });
 
   /**
