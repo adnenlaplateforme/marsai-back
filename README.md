@@ -50,7 +50,10 @@ This will start:
 
 - 🗄 MySQL 8.4
 - 🧰 phpMyAdmin
+- 📬 Mailpit (catches every outgoing email, see §6)
 - 📦 Persistent Docker volume (db_data)
+
+The API itself is **not** in this stack: it runs on your host with `npm run dev`.
 
 Access services
 
@@ -59,6 +62,8 @@ Access services
   - Port: ${MYSQL_PORT} (default: 3308)
 - phpMyAdmin
   - URL: http://localhost:8080 (or your custom PHPMYADMIN_PORT)
+- Mailpit
+  - URL: http://127.0.0.1:8025 (or your custom MAILPIT_UI_PORT)
 
 Stop containers
 
@@ -71,6 +76,20 @@ To remove volumes as well:
 ```sh
 docker compose down -v
 ```
+
+### Deployment
+
+Deployment uses a **separate, self-contained file**, which must be passed with
+`-f` on every command — without it Docker reads `docker-compose.yml` and starts
+the development stack instead:
+
+```sh
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+That stack runs MySQL, Mailpit and the API in a container (no phpMyAdmin), under
+its own project name (`marsai-prod`), so it never touches your development
+database.
 
 ## 4. 🌱 Seed the Admin User
 
