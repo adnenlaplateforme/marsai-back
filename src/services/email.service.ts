@@ -33,8 +33,8 @@ if (process.env.NODE_ENV === 'development') {
 } else {
   transporter = nodemailer.createTransport({
     host: process.env.MAILER_HOST,
-    port: Number(process.env.MAILEROO_PORT) || 587,
-    secure: process.env.MAILEROO_PORT === '465',
+    port: Number(process.env.MAILER_PORT) || 587,
+    secure: process.env.MAILER_PORT === '465',
     auth: {
       user: process.env.MAILER_EMAIL,
       pass: process.env.MAILER_PASS,
