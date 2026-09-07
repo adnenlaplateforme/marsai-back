@@ -85,6 +85,11 @@ const sendMail = async (
 
   const result = await Promise.allSettled(sendPromises);
   console.info('Email sent: ' + result.length);
+  result.forEach((r) => {
+    if (r.status === 'fulfilled') {
+      console.info(`preview URL: ${nodemailer.getTestMessageUrl(r.value)}`);
+    }
+  });
   await newsletterModel.setIsSent(newsletter.id);
 };
 
@@ -116,7 +121,7 @@ const sendMailSubscribeEvent = async (
   eventDescription: string,
   token: string,
 ): Promise<void> => {
-  await transporter.sendMail({
+  const result = await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: participantEmail,
     subject: `Subscription Confirmation for Event: ${eventTitle}`,
@@ -134,6 +139,7 @@ const sendMailSubscribeEvent = async (
   console.info(
     `Subscription confirmation email sent to ${participantEmail} for event ${eventTitle}`,
   );
+  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 const sendJuryInvites = async (invites: { email: string; token: string }[]) => {
@@ -153,6 +159,11 @@ const sendJuryInvites = async (invites: { email: string; token: string }[]) => {
 
   const result = await Promise.allSettled(sendPromises);
   console.info('Email sent: ' + result.length);
+  result.forEach((r) => {
+    if (r.status === 'fulfilled') {
+      console.info(`preview URL: ${nodemailer.getTestMessageUrl(r.value)}`);
+    }
+  });
 };
 
 const statusUpdatePendingMail = async (
@@ -188,13 +199,14 @@ const statusUpdateMail = async (
     .replace('{{DIRECTOR_LASTNAME}}', movie.director.lastname)
     .replace('{{MOVIE_ENGLISH_TITLE}}', movie.english_title)
     .replace('{{ADMIN_MESSAGE}}', adminData.adminText);
-  await transporter.sendMail({
+  const result = await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: movie.director.email,
     subject: `Status update on your movie submission: ${movie.english_title}`,
     html: personalizedHtml,
   });
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
+  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 /**
@@ -216,7 +228,7 @@ const movieResubmittedMail = async (
       '{{ADMIN_MOVIE_URL}}',
       `${process.env.FRONT_IP}/admin/movies/${movie.id}-${movie.slug}`,
     );
-  await transporter.sendMail({
+  const result = await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: process.env.ADMIN_EMAIL,
     subject: `Updated movie submission to review: ${movie.english_title}`,
@@ -225,6 +237,7 @@ const movieResubmittedMail = async (
   console.info(
     `sent email to ${process.env.ADMIN_EMAIL} about movie ${movie.id}`,
   );
+  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 const emailService = {
