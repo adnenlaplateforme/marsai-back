@@ -9,6 +9,11 @@
 # ⚠️ Le `-f` est obligatoire sur CHAQUE commande. Sans lui, Docker lit le
 # `docker-compose.yml` du dossier et démarre le stack de développement.
 #
+# Prérequis : le reverse proxy Traefik tourne déjà sur le VPS, avec son réseau
+# `traefik` et un certificateur Let's Encrypt nommé `letsencrypt`. Aucun service
+# n'est publié sur l'hôte ici — Traefik écoute sur 80/443 et route vers
+# marsai-api par ce réseau, seule Mailpit garde son interface en loopback.
+#
 # `name:` est ce qui sépare les deux stacks. Sans cette ligne, Compose déduirait
 # le nom du dossier (`marsai-back`) et ce fichier reprendrait les conteneurs ET
 # le volume de la base de développement. Sur le VPS c'est sans conséquence, mais
@@ -19,16 +24,16 @@ services:
   marsai-db:
     image: mysql:8.4.8
     restart: always
-    ports:
-      # Publié sur la loopback uniquement, pour les sauvegardes et l'accès par
-      # tunnel SSH. marsai-api, lui, ne passe pas par là : il joint la base par
-      # le réseau compose, sur le port interne 3306.
-      #
-      # La loopback n'est pas une précaution de principe : Docker écrit ses
-      # règles dans la chaîne DOCKER d'iptables, évaluée AVANT celles d'ufw.
-      # Publié sur 0.0.0.0, MySQL serait joignable depuis Internet avec les
-      # identifiants du .env, et `ufw status` affirmerait le contraire.
-      - '127.0.0.1:${MYSQL_PORT:-3308}:3306'
+    # Aucun port publié : marsai-api joint la base par le réseau compose, sur le
+    # port interne 3306, et rien sur l'hôte n'a besoin d'y parler. Les
+    # sauvegardes et l'accès ponctuel passent par le conteneur :
+    #   docker compose -f docker-compose.prod.yml exec marsai-db \
+    #     mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" > dump.sql
+    #
+    # Ne pas le publier « juste sur la loopback » non plus : Docker écrit ses
+    # règles dans la chaîne DOCKER d'iptables, évaluée AVANT celles d'ufw, et
+    # une erreur de bind sur 0.0.0.0 offrirait MySQL à Internet avec les
+    # identifiants du .env pendant qu'`ufw status` affirmerait le contraire.
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -76,16 +81,24 @@ services:
     build:
       context: .
     restart: always
-    ports:
-      # Le port interne est figé à 5000 (l'EXPOSE du Dockerfile) et seul le port
-      # publié côté hôte se règle, par PORT. Publier '${PORT}:${PORT}' était un
-      # piège : le PORT du conteneur vient d'env_file, pas de l'interpolation,
-      # si bien qu'un PORT passé au shell déplaçait le port hôte sans déplacer
-      # celui sur lequel l'app écoute.
-      #
-      # Seul service exposé au public, faute de reverse proxy. Le jour où l'on
-      # met Caddy ou nginx devant, cette ligne repasse en '127.0.0.1:...'.
-      - '${PORT:-5000}:5000'
+    # Aucun `ports:` : l'API n'est PAS publiée sur l'hôte. Traefik la joint par
+    # le réseau `traefik` et c'est lui qui écoute sur 80/443. Republier 5000
+    # ouvrirait une porte en clair à côté du HTTPS, hors de tout certificat.
+    networks: [traefik, default]
+    labels:
+      - 'traefik.enable=true'
+      # Sur quel réseau Traefik doit joindre ce conteneur. Sans cette ligne il
+      # peut choisir `default`, où il n'est pas, et répondre 502.
+      - 'traefik.docker.network=traefik'
+      - 'traefik.http.routers.marsai-api.rule=Host(`api-marsai.adnensaid.fr`)'
+      - 'traefik.http.routers.marsai-api.entrypoints=websecure'
+      # `letsencrypt` doit être le nom du certificateur déclaré dans la
+      # configuration statique du Traefik du VPS — ce fichier ne le crée pas.
+      - 'traefik.http.routers.marsai-api.tls.certresolver=letsencrypt'
+      # Le port DANS le conteneur (l'EXPOSE du Dockerfile), pas un port d'hôte.
+      # Sans lui, Traefik doit deviner et renvoie un 404 dès que le conteneur
+      # expose autre chose que 80.
+      - 'traefik.http.services.marsai-api.loadbalancer.server.port=5000'
     env_file:
       - .env
     environment:
@@ -120,3 +133,15 @@ services:
 
 volumes:
   db_data:
+
+networks:
+  # `external` : ce réseau appartient au Traefik du VPS, qui tourne comme une
+  # pile indépendante. Compose le rejoint, ne le crée pas, et refuse de démarrer
+  # s'il n'existe pas — c'est voulu, un démarrage sans lui donnerait une API que
+  # Traefik ne verrait jamais. Pour essayer la pile hors du VPS :
+  #   docker network create traefik
+  traefik:
+    external: true
+  # Le réseau interne où marsai-api, marsai-db et mailpit se parlent. Traefik
+  # n'y entre pas : la base et le serveur de courrier lui restent invisibles.
+  default:
