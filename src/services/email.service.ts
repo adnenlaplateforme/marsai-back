@@ -49,9 +49,9 @@ if (process.env.NODE_ENV === 'development') {
   if (process.env.NODE_ENV !== 'test') {
     try {
       await transporter.verify();
-      console.info('Maileroo SMTP connected successfully');
+      console.info(`SMTP connected successfully (${process.env.MAILER_HOST})`);
     } catch (e) {
-      console.error('Maileroo connection failed:', e);
+      console.error('SMTP connection failed:', e);
     }
   }
 }
