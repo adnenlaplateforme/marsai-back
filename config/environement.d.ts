@@ -7,6 +7,8 @@ declare global {
       MYSQL_USER: string;
       MYSQL_PASSWORD: string;
       MYSQL_PORT: number;
+      // Absent hors conteneur : la connexion retombe alors sur localhost.
+      MYSQL_HOST?: string;
       JWT_SECRET: string;
       ADMIN_EMAIL: string;
       ADMIN_PASSWORD: string;
