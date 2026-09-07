@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.gitignore
+
+# Les secrets arrivent par l'environnement (compose), jamais dans une couche
+# d'image : une image se pousse, un .env non.
+.env
+.env.test
+.env.example
+.env.test.example
+
+.husky
+.devbox
+backups
+uploads
+coverage

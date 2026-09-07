@@ -10,49 +10,38 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import type { MovieWithDirector } from '../types/interfaces/Movie.interface.js';
 
-let transporter: nodemailer.Transporter<
+// Le transport se construit entièrement depuis l'environnement, sans cas
+// particulier au développement : en dev comme en déploiement, MAILER_HOST
+// désigne Mailpit, qui piège le courrier au lieu de le remettre.
+//
+// Le compte de test Ethereal qui tenait ce rôle en dev a disparu avec cette
+// branche : il faisait dépendre le démarrage d'un appel réseau à
+// ethereal.email, et ses messages n'étaient consultables que par une URL à
+// usage unique. L'interface de Mailpit les remplace.
+const transporter: nodemailer.Transporter<
   SMTPTransport.SentMessageInfo,
   SMTPTransport.Options
->;
-if (process.env.NODE_ENV === 'development') {
-  try {
-    const testAccount = await nodemailer.createTestAccount();
-    console.info(testAccount);
-    transporter = nodemailer.createTransport({
-      host: testAccount.smtp.host,
-      port: testAccount.smtp.port,
-      secure: testAccount.smtp.secure,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-  } catch (e) {
-    console.error('failed to create test account mail', e);
-  }
-} else {
-  transporter = nodemailer.createTransport({
-    host: process.env.MAILER_HOST,
-    port: Number(process.env.MAILER_PORT) || 587,
-    secure: process.env.MAILER_PORT === '465',
-    auth: {
-      user: process.env.MAILER_EMAIL,
-      pass: process.env.MAILER_PASS,
-    },
-    debug: false,
-    logger: process.env.NODE_ENV !== 'test',
-  });
+> = nodemailer.createTransport({
+  host: process.env.MAILER_HOST,
+  port: Number(process.env.MAILER_PORT) || 587,
+  secure: process.env.MAILER_PORT === '465',
+  auth: {
+    user: process.env.MAILER_EMAIL,
+    pass: process.env.MAILER_PASS,
+  },
+  debug: false,
+  logger: process.env.NODE_ENV !== 'test',
+});
 
-  // En test, on n'ouvre aucune connexion SMTP : ce module est importé
-  // transitivement par `app`, et le verify() échouerait sur chaque fichier
-  // de test après plusieurs secondes de timeout réseau.
-  if (process.env.NODE_ENV !== 'test') {
-    try {
-      await transporter.verify();
-      console.info('Maileroo SMTP connected successfully');
-    } catch (e) {
-      console.error('Maileroo connection failed:', e);
-    }
+// En test, on n'ouvre aucune connexion SMTP : ce module est importé
+// transitivement par `app`, et le verify() échouerait sur chaque fichier
+// de test après plusieurs secondes de timeout réseau.
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    await transporter.verify();
+    console.info(`SMTP connected successfully (${process.env.MAILER_HOST})`);
+  } catch (e) {
+    console.error('SMTP connection failed:', e);
   }
 }
 
@@ -85,11 +74,6 @@ const sendMail = async (
 
   const result = await Promise.allSettled(sendPromises);
   console.info('Email sent: ' + result.length);
-  result.forEach((r) => {
-    if (r.status === 'fulfilled') {
-      console.info(`preview URL: ${nodemailer.getTestMessageUrl(r.value)}`);
-    }
-  });
   await newsletterModel.setIsSent(newsletter.id);
 };
 
@@ -121,7 +105,7 @@ const sendMailSubscribeEvent = async (
   eventDescription: string,
   token: string,
 ): Promise<void> => {
-  const result = await transporter.sendMail({
+  await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: participantEmail,
     subject: `Subscription Confirmation for Event: ${eventTitle}`,
@@ -139,7 +123,6 @@ const sendMailSubscribeEvent = async (
   console.info(
     `Subscription confirmation email sent to ${participantEmail} for event ${eventTitle}`,
   );
-  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 const sendJuryInvites = async (invites: { email: string; token: string }[]) => {
@@ -159,11 +142,6 @@ const sendJuryInvites = async (invites: { email: string; token: string }[]) => {
 
   const result = await Promise.allSettled(sendPromises);
   console.info('Email sent: ' + result.length);
-  result.forEach((r) => {
-    if (r.status === 'fulfilled') {
-      console.info(`preview URL: ${nodemailer.getTestMessageUrl(r.value)}`);
-    }
-  });
 };
 
 const statusUpdatePendingMail = async (
@@ -178,14 +156,13 @@ const statusUpdatePendingMail = async (
     .replace('{{MOVIE_ENGLISH_TITLE}}', movie.english_title)
     .replace('{{ADMIN_MESSAGE}}', adminData.adminText)
     .replace('{{FORM_EDIT_URL}}', `${process.env.FRONT_IP}/submit/${token}`);
-  const result = await transporter.sendMail({
+  await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: movie.director.email,
     subject: `Status update on your movie submission: ${movie.english_title}`,
     html: personalizedHtml,
   });
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
-  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 const statusUpdateMail = async (
   adminData: { adminText: string; adminStatus: string },
@@ -199,14 +176,13 @@ const statusUpdateMail = async (
     .replace('{{DIRECTOR_LASTNAME}}', movie.director.lastname)
     .replace('{{MOVIE_ENGLISH_TITLE}}', movie.english_title)
     .replace('{{ADMIN_MESSAGE}}', adminData.adminText);
-  const result = await transporter.sendMail({
+  await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: movie.director.email,
     subject: `Status update on your movie submission: ${movie.english_title}`,
     html: personalizedHtml,
   });
   console.info(`sent email to ${movie.director.email} about movie ${movie.id}`);
-  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 /**
@@ -228,7 +204,7 @@ const movieResubmittedMail = async (
       '{{ADMIN_MOVIE_URL}}',
       `${process.env.FRONT_IP}/admin/movies/${movie.id}-${movie.slug}`,
     );
-  const result = await transporter.sendMail({
+  await transporter.sendMail({
     from: `MarsAi <${process.env.MAILER_EMAIL}>`,
     to: process.env.ADMIN_EMAIL,
     subject: `Updated movie submission to review: ${movie.english_title}`,
@@ -237,7 +213,6 @@ const movieResubmittedMail = async (
   console.info(
     `sent email to ${process.env.ADMIN_EMAIL} about movie ${movie.id}`,
   );
-  console.info(`preview URL: ${nodemailer.getTestMessageUrl(result)}`);
 };
 
 const emailService = {
