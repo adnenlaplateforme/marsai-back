@@ -1,9 +1,24 @@
+# Un seul fichier pour les deux usages, départagés par les profils Compose :
+#
+#   dev  : docker compose --profile dev  up -d          (base + phpMyAdmin + Mailpit)
+#          l'API tourne à côté, sur l'hôte, par `npm run dev`
+#   prod : docker compose --profile prod up -d --build  (base + API + Mailpit)
+#
+# Sans `--profile`, seuls les services sans profil démarrent : marsai-db et
+# mailpit. Les deux profils partagent la même base et le même volume — c'est
+# voulu, il n'y a qu'une base de travail sur une machine de développement.
+
 services:
   marsai-db:
     image: mysql:8.4.8
-    ports:
-      - '${MYSQL_PORT}:3306'
     restart: always
+    ports:
+      # Lié à la loopback, et non à 0.0.0.0 comme auparavant. Docker écrit ses
+      # règles directement dans la chaîne DOCKER d'iptables, évaluée AVANT
+      # celles d'ufw : un `ufw deny 3308` ne protégerait pas ce port. Publié sur
+      # 0.0.0.0, MySQL serait joignable depuis Internet une fois sur le VPS,
+      # avec les identifiants du .env, et `ufw status` affirmerait le contraire.
+      - '127.0.0.1:${MYSQL_PORT:-3308}:3306'
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -12,14 +27,99 @@ services:
     volumes:
       - ./database:/docker-entrypoint-initdb.d
       - db_data:/var/lib/mysql
+    # connection.ts ouvre sa connexion à l'import, au tout premier tick de
+    # l'app : sans cette sonde, marsai-api démarrerait avant que MySQL
+    # n'accepte les connexions et planterait au lieu d'attendre.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    restart: always
+    # Aucun profil : Mailpit sert en dev comme en déploiement. C'est lui qui
+    # remplace le compte de test Ethereal qu'email.service.ts créait au
+    # démarrage — plus d'appel réseau à ethereal.email pour booter.
+    ports:
+      # Le port SMTP est publié parce qu'en dev l'API tourne sur l'hôte, pas
+      # dans un conteneur : `npm run dev` joint Mailpit par la loopback. En
+      # prod, marsai-api passe par le réseau compose et n'en a pas besoin.
+      #
+      # Il dérive de MAILER_PORT à dessein : c'est le port que l'app de dev
+      # compose, les deux ne peuvent donc pas diverger. Le régler sert dès
+      # qu'un autre projet occupe déjà 1025 sur la machine.
+      - '127.0.0.1:${MAILER_PORT:-1025}:1025'
+      # L'interface donne à lire TOUS les mails émis, dont les liens
+      # /invite/<token> qui permettent de se créer un compte juré et les jetons
+      # de modification de film. Publiée sur le VPS, elle offrirait ça au
+      # premier venu — d'où la loopback, et un tunnel pour la consulter :
+      #   ssh -L 8025:127.0.0.1:8025 user@vps
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+    environment:
+      # Une boîte de test ne doit pas grossir sans fin sur le disque du VPS.
+      MP_MAX_MESSAGES: 500
+
   phpmyadmin:
     image: phpmyadmin
     restart: always
+    profiles: [dev]
     ports:
-      - '${PHPMYADMIN_PORT:-8080}:80'
+      - '127.0.0.1:${PHPMYADMIN_PORT:-8080}:80'
     environment:
       PMA_HOST: marsai-db
     depends_on:
       - marsai-db
+
+  marsai-api:
+    build:
+      context: .
+    restart: always
+    profiles: [prod]
+    ports:
+      # Le port interne est figé à 5000 (l'EXPOSE du Dockerfile) et seul le port
+      # publié côté hôte se règle, par PORT. Publier '${PORT}:${PORT}' était un
+      # piège : le PORT du conteneur vient d'env_file, pas de l'interpolation,
+      # si bien qu'un PORT passé au shell déplaçait le port hôte sans déplacer
+      # celui sur lequel l'app écoute.
+      - '${PORT:-5000}:5000'
+    env_file:
+      - .env
+    environment:
+      # `environment` l'emporte sur `env_file`, qui l'emporte lui-même sur le
+      # ENV de l'image. C'est le seul endroit d'où ces valeurs peuvent être
+      # imposées : le .env du serveur reste celui qu'on édite à la main.
+      #
+      # NODE_ENV surtout : sans cette ligne, le NODE_ENV=development du .env
+      # gagnerait sur le ENV=production du Dockerfile, et error-handler.ts
+      # renverrait ses stack traces au client.
+      NODE_ENV: production
+      PORT: 5000
+      # Dans le réseau compose, MySQL et Mailpit se joignent par leur nom de
+      # service et sur leur port interne — pas les ports du .env, qui sont ceux
+      # publiés côté hôte et n'existent que depuis l'extérieur.
+      MYSQL_HOST: marsai-db
+      MYSQL_PORT: 3306
+      MAILER_HOST: mailpit
+      MAILER_PORT: 1025
+      # MAILER_EMAIL ne sert plus qu'à l'en-tête From. Le .env du dépôt le
+      # laisse vide, ce qui produirait un « MarsAi <> » que le SMTP refuse :
+      # d'où ce repli, écrasé dès que le .env porte une vraie adresse.
+      MAILER_EMAIL: ${MAILER_EMAIL:-noreply@marsai.local}
+      # Mailpit n'annonce pas AUTH, nodemailer n'authentifie donc pas. Le mot
+      # de passe Maileroo n'a aucune raison d'entrer dans ce conteneur.
+      MAILER_PASS: ''
+    depends_on:
+      marsai-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
 volumes:
   db_data:
