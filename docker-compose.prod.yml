@@ -1,0 +1,108 @@
+# Stack de déploiement. Se lance SEUL, jamais empilé sur docker-compose.yml :
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Ce n'est volontairement pas un fichier d'override. La fusion multi-fichiers de
+# Compose sait ajouter un service et modifier une valeur, jamais en retirer :
+# `ports` est une séquence, donc concaténée, et rien ne supprime un service. Le
+# port MySQL publié et phpmyadmin du fichier de dev seraient donc restés là,
+# c'est-à-dire exactement ce que le déploiement doit laisser derrière lui.
+
+# Sans ce nom, Compose déduirait le projet du dossier — « marsai-back » pour les
+# deux fichiers. Lancé en local, ce stack réutiliserait alors les conteneurs et
+# le volume db_data de celui de dev, et écraserait la base de travail.
+name: marsai-prod
+
+services:
+  marsai-db:
+    image: mysql:8.4.8
+    restart: always
+    # Aucun port publié, contrairement au fichier de dev : la base n'est
+    # joignable que par marsai-api, à l'intérieur du réseau compose. Pour une
+    # inspection ponctuelle sur le VPS, passer par un tunnel SSH.
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./database:/docker-entrypoint-initdb.d
+      - db_data:/var/lib/mysql
+    # connection.ts ouvre sa connexion à l'import, au tout premier tick de
+    # l'app : sans cette sonde, marsai-api démarrerait avant que MySQL
+    # n'accepte les connexions et planterait au lieu d'attendre.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  marsai-api:
+    build:
+      context: .
+    restart: always
+    ports:
+      # Le port interne est figé à 5000 (l'EXPOSE du Dockerfile) et seul le port
+      # publié côté hôte se règle, par PORT. Publier '${PORT}:${PORT}' était un
+      # piège : le PORT du conteneur vient d'env_file, pas de l'interpolation,
+      # si bien qu'un PORT passé au shell déplaçait le port hôte sans déplacer
+      # celui sur lequel l'app écoute.
+      - '${PORT:-5000}:5000'
+    env_file:
+      - .env
+    environment:
+      PORT: 5000
+      # `environment` l'emporte sur `env_file`, qui l'emporte lui-même sur le
+      # ENV de l'image. C'est le seul endroit d'où ces valeurs peuvent être
+      # imposées : le .env du serveur reste celui qu'on édite à la main.
+      #
+      # NODE_ENV surtout : sans cette ligne, le NODE_ENV=development du .env
+      # gagnerait sur le ENV=production du Dockerfile, et email.service.ts
+      # partirait sur sa branche Ethereal — un appel réseau à ethereal.email
+      # au démarrage, dont dépendrait le boot.
+      NODE_ENV: production
+      # Dans le réseau compose, MySQL se joint par son nom de service et sur le
+      # port interne 3306 — pas le MYSQL_PORT du .env, qui est le port publié
+      # côté hôte (3308) et n'existe que depuis l'extérieur, en dev.
+      MYSQL_HOST: marsai-db
+      MYSQL_PORT: 3306
+      # Tout le courrier tombe dans Mailpit : aucun mail ne quitte la machine,
+      # quelle que soit l'adresse enregistrée en base.
+      MAILER_HOST: mailpit
+      MAILER_PORT: 1025
+      # MAILER_EMAIL ne sert plus qu'à l'en-tête From. Le .env du dépôt le
+      # laisse vide, ce qui produirait un « MarsAi <> » que le SMTP refuse :
+      # d'où ce repli, écrasé dès que le .env porte une vraie adresse.
+      MAILER_EMAIL: ${MAILER_EMAIL:-noreply@marsai.local}
+      # Mailpit n'annonce pas AUTH, nodemailer n'authentifie donc pas. Le mot
+      # de passe Maileroo n'a aucune raison d'entrer dans ce conteneur.
+      MAILER_PASS: ''
+    depends_on:
+      marsai-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    restart: always
+    ports:
+      # Lié à la loopback, pas à 0.0.0.0. Cette interface donne à lire TOUS les
+      # mails émis, dont les liens d'invitation jury (/invite/<token>) et les
+      # jetons de modification de film : publiée sur le VPS, elle offrirait au
+      # premier venu de quoi se créer un compte juré.
+      # Pour la consulter : ssh -L 8025:127.0.0.1:8025 user@vps
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+      # Le port SMTP 1025 n'est pas publié : seul marsai-api l'utilise, par le
+      # réseau compose.
+    environment:
+      # Une boîte de test ne doit pas grossir sans fin sur le disque du VPS.
+      MP_MAX_MESSAGES: 500
+
+volumes:
+  db_data:
